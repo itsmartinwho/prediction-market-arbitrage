@@ -17,6 +17,7 @@ node_modules/
 .pnp.js
 
 # Next.js
+.next/
 frontend/.next/
 frontend/out/
 frontend/.vercel
