@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { GlowingBorder } from "./GlowingBorder";
 import { NeonText } from "./NeonText";
 
-type TabType = "whales" | "news" | "arbitrage";
+type TabType = "markets" | "explorer" | "arbitrage";
 
 interface HelpDrawerProps {
   isOpen: boolean;
@@ -75,8 +75,8 @@ export function HelpDrawer({ isOpen, onClose, activeTab }: HelpDrawerProps) {
 
             {/* Tab-Specific Content */}
             <div className="space-y-6">
-              {activeTab === "whales" && <WhaleHelp />}
-              {activeTab === "news" && <NewsHelp />}
+              {activeTab === "markets" && <MarketActivityHelp />}
+              {activeTab === "explorer" && <MarketExplorerHelp />}
               {activeTab === "arbitrage" && <ArbitrageHelp />}
 
               {/* Market Stats - Always visible */}
@@ -125,31 +125,32 @@ export function HelpDrawer({ isOpen, onClose, activeTab }: HelpDrawerProps) {
   );
 }
 
-function WhaleHelp() {
+function MarketActivityHelp() {
   return (
-    <GlowingBorder color="magenta" className="p-4">
-      <NeonText color="magenta" size="md" className="mb-3">
-        WHALE TRACKING
+    <GlowingBorder color="cyan" className="p-4">
+      <NeonText color="cyan" size="md" className="mb-3">
+        MARKET ACTIVITY
       </NeonText>
       <div className="space-y-3 text-sm">
         <div>
-          <div className="text-neon-magenta font-semibold mb-1">1. IDENTIFY</div>
+          <div className="text-neon-cyan font-semibold mb-1">HOT MARKETS</div>
           <p className="text-gray-400">
-            Monitor top traders with the highest P&L and win rates on
-            Polymarket.
+            Markets with the highest trading volume in the last 24 hours.
+            High volume indicates active interest.
           </p>
         </div>
         <div>
-          <div className="text-neon-magenta font-semibold mb-1">2. TRACK</div>
+          <div className="text-neon-cyan font-semibold mb-1">PRICE MOVERS</div>
           <p className="text-gray-400">
-            Follow their positions and trades in real-time to spot market-moving
-            activity.
+            Markets with extreme prices (furthest from 50/50). These show
+            strong market consensus on likely outcomes.
           </p>
         </div>
         <div>
-          <div className="text-neon-magenta font-semibold mb-1">3. MIRROR</div>
+          <div className="text-neon-cyan font-semibold mb-1">CLOSING SOON</div>
           <p className="text-gray-400">
-            Consider following successful traders with proven track records.
+            Markets ending within 7 days. Resolution is imminent, so prices
+            should reflect true probabilities.
           </p>
         </div>
       </div>
@@ -157,32 +158,32 @@ function WhaleHelp() {
   );
 }
 
-function NewsHelp() {
+function MarketExplorerHelp() {
   return (
     <GlowingBorder color="yellow" className="p-4">
       <NeonText color="yellow" size="md" className="mb-3">
-        NEWS SIGNALS
+        MARKET EXPLORER
       </NeonText>
       <div className="space-y-3 text-sm">
         <div>
-          <div className="text-neon-yellow font-semibold mb-1">1. AGGREGATE</div>
+          <div className="text-neon-yellow font-semibold mb-1">SEARCH</div>
           <p className="text-gray-400">
-            Collect breaking news from multiple sources related to prediction
-            markets.
+            Search for any market by keyword. Try topics like "trump",
+            "bitcoin", "super bowl", or "fed rate".
           </p>
         </div>
         <div>
-          <div className="text-neon-yellow font-semibold mb-1">2. ANALYZE</div>
+          <div className="text-neon-yellow font-semibold mb-1">CATEGORIES</div>
           <p className="text-gray-400">
-            AI analyzes news sentiment and identifies affected markets before
-            prices adjust.
+            Filter by category: Politics, Crypto, Sports, or Economy.
+            Click a filter to see related markets.
           </p>
         </div>
         <div>
-          <div className="text-neon-yellow font-semibold mb-1">3. SIGNAL</div>
+          <div className="text-neon-yellow font-semibold mb-1">TRADE</div>
           <p className="text-gray-400">
-            Receive trading signals with confidence scores to act on news
-            quickly.
+            Click any market to open it directly on Polymarket where you
+            can view details and place trades.
           </p>
         </div>
       </div>
@@ -215,6 +216,13 @@ function ArbitrageHelp() {
           <div className="text-neon-cyan font-semibold mb-1">3. ALERT</div>
           <p className="text-gray-400">
             New opportunities trigger alerts for quick manual execution.
+          </p>
+        </div>
+        <div>
+          <div className="text-neon-yellow font-semibold mb-1">WHY NO OPPORTUNITIES?</div>
+          <p className="text-gray-400">
+            Polymarket is usually efficiently priced. The diagnostics panel
+            shows exactly why markets are filtered (no liquidity, below threshold, etc.).
           </p>
         </div>
       </div>

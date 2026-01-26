@@ -47,6 +47,21 @@ class ScannerStatsResponse(BaseModel):
     total_seen: int
 
 
+class ScanDiagnosticsResponse(BaseModel):
+    """Scan diagnostics response - shows why markets are filtered."""
+
+    total_markets: int
+    filtered_not_binary: int
+    filtered_no_tokens: int
+    filtered_no_clob_liquidity: int
+    clob_errors: int
+    used_gamma_fallback: int
+    filtered_not_profitable: int
+    filtered_below_threshold: int
+    opportunities_found: int
+    threshold_percent: float
+
+
 # Global scanner instance (will be initialized in main.py)
 _scanner = None
 
@@ -213,3 +228,45 @@ async def trigger_scan():
             for o in opps[:10]  # Top 10
         ],
     }
+
+
+@router.get("/diagnostics", response_model=ScanDiagnosticsResponse)
+async def get_scan_diagnostics():
+    """
+    Get diagnostics from the last scan.
+
+    Shows why markets were filtered (no liquidity, not profitable, etc.)
+    Useful for understanding why there are no opportunities.
+    """
+    from app.config import get_settings
+
+    scanner = get_scanner()
+    settings = get_settings()
+
+    if not scanner:
+        return ScanDiagnosticsResponse(
+            total_markets=0,
+            filtered_not_binary=0,
+            filtered_no_tokens=0,
+            filtered_no_clob_liquidity=0,
+            clob_errors=0,
+            used_gamma_fallback=0,
+            filtered_not_profitable=0,
+            filtered_below_threshold=0,
+            opportunities_found=0,
+            threshold_percent=settings.min_profit_threshold * 100,
+        )
+
+    diag = scanner.detector.get_diagnostics()
+    return ScanDiagnosticsResponse(
+        total_markets=diag.get("total_markets", 0),
+        filtered_not_binary=diag.get("filtered_not_binary", 0),
+        filtered_no_tokens=diag.get("filtered_no_tokens", 0),
+        filtered_no_clob_liquidity=diag.get("filtered_no_clob_liquidity", 0),
+        clob_errors=diag.get("clob_errors", 0),
+        used_gamma_fallback=diag.get("used_gamma_fallback", 0),
+        filtered_not_profitable=diag.get("filtered_not_profitable", 0),
+        filtered_below_threshold=diag.get("filtered_below_threshold", 0),
+        opportunities_found=diag.get("opportunities_found", 0),
+        threshold_percent=settings.min_profit_threshold * 100,
+    )

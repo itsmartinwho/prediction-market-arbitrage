@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.api.routes import markets_router, arbitrage_router, websocket_router, whales_router, news_router
+from app.api.routes import markets_router, arbitrage_router, websocket_router, whales_router, news_router, market_activity_router
 from app.api.routes.arbitrage import set_scanner
 from app.services.scanner import OpportunityScanner
 from app.services.notifications import TelegramNotifier, ConsoleNotifier, MultiNotifier
@@ -86,6 +86,7 @@ app.include_router(markets_router, prefix="/api")
 app.include_router(arbitrage_router, prefix="/api")
 app.include_router(whales_router, prefix="/api")
 app.include_router(news_router, prefix="/api")
+app.include_router(market_activity_router, prefix="/api")
 app.include_router(websocket_router)
 
 

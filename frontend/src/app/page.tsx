@@ -7,16 +7,16 @@ import { useOpportunitiesWebSocket } from "@/hooks/useWebSocket";
 import { fetchScannerStats, triggerScan } from "@/lib/api";
 import { StatsStrip } from "@/components/dashboard/StatsStrip";
 import { OpportunityFeed } from "@/components/dashboard/OpportunityFeed";
-import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
-import { NewsFeed } from "@/components/dashboard/NewsFeed";
+import { MarketActivity } from "@/components/dashboard/MarketActivity";
+import { MarketExplorer } from "@/components/dashboard/MarketExplorer";
 import { NeonText } from "@/components/shared/NeonText";
 import { GlowingBorder } from "@/components/shared/GlowingBorder";
 import { HelpDrawer } from "@/components/shared/HelpDrawer";
 
-type TabType = "whales" | "news" | "arbitrage";
+type TabType = "markets" | "explorer" | "arbitrage";
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<TabType>("whales");
+  const [activeTab, setActiveTab] = useState<TabType>("markets");
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   // Real-time opportunities via WebSocket
@@ -38,9 +38,9 @@ export default function Dashboard() {
   };
 
   const tabs = [
-    { id: "whales" as const, label: "WHALE TRACKER", color: "magenta" },
-    { id: "news" as const, label: "NEWS SIGNALS", color: "yellow" },
-    { id: "arbitrage" as const, label: "ARBITRAGE", color: "cyan" },
+    { id: "markets" as const, label: "MARKET ACTIVITY", color: "cyan" },
+    { id: "explorer" as const, label: "EXPLORE MARKETS", color: "yellow" },
+    { id: "arbitrage" as const, label: "ARBITRAGE", color: "magenta" },
   ];
 
   return (
@@ -55,11 +55,11 @@ export default function Dashboard() {
               animate={{ opacity: 1, x: 0 }}
             >
               <NeonText color="cyan" size="2xl">
-                POLYMARKET ARBITRAGE
+                POLYMARKET DASHBOARD
               </NeonText>
             </motion.h1>
             <p className="text-gray-500 text-sm">
-              Real-time Polymarket trading opportunities. By{" "}
+              Real-time Polymarket data and arbitrage detection. By{" "}
               <a
                 href="https://github.com/itsmartinwho/"
                 target="_blank"
@@ -86,7 +86,7 @@ export default function Dashboard() {
               SCAN
             </button>
             <GlowingBorder className="px-3 py-1.5">
-              <span className="text-gray-400 text-xs">v0.1.0</span>
+              <span className="text-gray-400 text-xs">v0.2.0</span>
             </GlowingBorder>
           </div>
         </div>
@@ -130,8 +130,8 @@ export default function Dashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          {activeTab === "whales" && <WhaleTracker />}
-          {activeTab === "news" && <NewsFeed />}
+          {activeTab === "markets" && <MarketActivity />}
+          {activeTab === "explorer" && <MarketExplorer />}
           {activeTab === "arbitrage" && (
             <OpportunityFeed
               opportunities={opportunities}
@@ -162,14 +162,14 @@ export default function Dashboard() {
             >
               JJ Martin
             </a>
-            {" "}| Polymarket Trading Opportunities
+            {" "}| Real Polymarket Data
           </div>
           <div className="flex items-center gap-4">
-            <span>Polymarket API</span>
+            <span>Polymarket Gamma API</span>
             <span>|</span>
             <span>WebSocket Real-time</span>
             <span>|</span>
-            <span>Telegram Alerts</span>
+            <span>Live Market Data</span>
           </div>
         </div>
       </footer>

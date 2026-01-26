@@ -77,3 +77,45 @@ export async function fetchNewsSignals() {
   }
   return response.json();
 }
+
+// Market Activity endpoints (real Polymarket data)
+export async function fetchHotMarkets(limit = 20) {
+  const response = await fetch(`${API_URL}/api/market-activity/hot?limit=${limit}`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch hot markets");
+  }
+  return response.json();
+}
+
+export async function fetchPriceMovers(limit = 20) {
+  const response = await fetch(`${API_URL}/api/market-activity/movers?limit=${limit}`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch price movers");
+  }
+  return response.json();
+}
+
+export async function fetchClosingSoon(days = 7, limit = 20) {
+  const response = await fetch(`${API_URL}/api/market-activity/closing-soon?days=${days}&limit=${limit}`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch closing soon markets");
+  }
+  return response.json();
+}
+
+export async function searchMarkets(query: string, limit = 20) {
+  const response = await fetch(`${API_URL}/api/market-activity/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+  if (!response.ok) {
+    throw new Error("Failed to search markets");
+  }
+  return response.json();
+}
+
+// Arbitrage diagnostics
+export async function fetchArbitrageDiagnostics() {
+  const response = await fetch(`${API_URL}/api/arbitrage/diagnostics`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch arbitrage diagnostics");
+  }
+  return response.json();
+}
