@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { GlowingBorder } from "./GlowingBorder";
 import { NeonText } from "./NeonText";
 
-type TabType = "markets" | "explorer" | "arbitrage";
+type TabType = "markets" | "whales" | "explorer" | "arbitrage";
 
 interface HelpDrawerProps {
   isOpen: boolean;
@@ -76,6 +76,7 @@ export function HelpDrawer({ isOpen, onClose, activeTab }: HelpDrawerProps) {
             {/* Tab-Specific Content */}
             <div className="space-y-6">
               {activeTab === "markets" && <MarketActivityHelp />}
+              {activeTab === "whales" && <WhaleTrackerHelp />}
               {activeTab === "explorer" && <MarketExplorerHelp />}
               {activeTab === "arbitrage" && <ArbitrageHelp />}
 
@@ -151,6 +152,39 @@ function MarketActivityHelp() {
           <p className="text-gray-400">
             Markets ending within 7 days. Resolution is imminent, so prices
             should reflect true probabilities.
+          </p>
+        </div>
+      </div>
+    </GlowingBorder>
+  );
+}
+
+function WhaleTrackerHelp() {
+  return (
+    <GlowingBorder color="magenta" className="p-4">
+      <NeonText color="magenta" size="md" className="mb-3">
+        WHALE TRACKER
+      </NeonText>
+      <div className="space-y-3 text-sm">
+        <div>
+          <div className="text-neon-magenta font-semibold mb-1">REAL TRADES</div>
+          <p className="text-gray-400">
+            Live feed of large trades (&gt;$1,000) from the Polymarket Data API.
+            See what big players are buying and selling in real-time.
+          </p>
+        </div>
+        <div>
+          <div className="text-neon-magenta font-semibold mb-1">TRADE DETAILS</div>
+          <p className="text-gray-400">
+            Each trade shows: trader name, BUY/SELL action, YES/NO outcome,
+            share count, price, and total USD value.
+          </p>
+        </div>
+        <div>
+          <div className="text-neon-magenta font-semibold mb-1">MARKET INSIGHT</div>
+          <p className="text-gray-400">
+            Large buys often signal confidence in an outcome. Track whale
+            activity to understand market sentiment shifts.
           </p>
         </div>
       </div>

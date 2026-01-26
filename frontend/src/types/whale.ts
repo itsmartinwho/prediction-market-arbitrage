@@ -1,21 +1,14 @@
-export interface Whale {
-  address: string;
-  name: string | null;
-  profit_loss: number;
-  volume: number;
-  positions_count: number;
-  win_rate: number | null;
-}
-
 export interface WhaleActivity {
-  whale_address: string;
-  whale_name: string | null;
-  market_id: string;
+  trader_name: string;
+  trader_address: string | null;
   market_question: string;
+  market_slug: string;
   action: "BUY" | "SELL";
-  outcome: "Yes" | "No";
-  shares: number;
+  outcome: string;
+  size: number;
   price: number;
-  timestamp: string;
   usd_value: number;
+  timestamp: string;
+  polymarket_url: string;
+  transaction_hash: string | null;
 }

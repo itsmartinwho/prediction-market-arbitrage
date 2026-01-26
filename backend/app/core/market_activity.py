@@ -62,9 +62,11 @@ class MarketActivity:
 
     def _market_to_summary(self, market: Market) -> MarketSummary:
         """Convert Market to MarketSummary."""
-        # Build Polymarket URL
-        slug = market.slug or market.id
-        polymarket_url = f"https://polymarket.com/event/{slug}"
+        # Build Polymarket URL - must use slug, not id
+        # If no slug, the market won't have a valid URL
+        polymarket_url = ""
+        if market.slug:
+            polymarket_url = f"https://polymarket.com/event/{market.slug}"
 
         return MarketSummary(
             id=market.id,

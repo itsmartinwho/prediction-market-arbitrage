@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 
 interface PulsingDotProps {
-  color?: "green" | "red" | "cyan" | "yellow";
+  color?: "green" | "red" | "cyan" | "yellow" | "magenta";
   size?: "sm" | "md" | "lg";
 }
 
@@ -12,6 +12,7 @@ const colorClasses = {
   red: "bg-neon-red",
   cyan: "bg-neon-cyan",
   yellow: "bg-neon-yellow",
+  magenta: "bg-neon-magenta",
 };
 
 const sizeClasses = {

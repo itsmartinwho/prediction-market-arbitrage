@@ -9,11 +9,12 @@ import { StatsStrip } from "@/components/dashboard/StatsStrip";
 import { OpportunityFeed } from "@/components/dashboard/OpportunityFeed";
 import { MarketActivity } from "@/components/dashboard/MarketActivity";
 import { MarketExplorer } from "@/components/dashboard/MarketExplorer";
+import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 import { NeonText } from "@/components/shared/NeonText";
 import { GlowingBorder } from "@/components/shared/GlowingBorder";
 import { HelpDrawer } from "@/components/shared/HelpDrawer";
 
-type TabType = "markets" | "explorer" | "arbitrage";
+type TabType = "markets" | "whales" | "explorer" | "arbitrage";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("markets");
@@ -38,9 +39,10 @@ export default function Dashboard() {
   };
 
   const tabs = [
-    { id: "markets" as const, label: "MARKET ACTIVITY", color: "cyan" },
-    { id: "explorer" as const, label: "EXPLORE MARKETS", color: "yellow" },
-    { id: "arbitrage" as const, label: "ARBITRAGE", color: "magenta" },
+    { id: "markets" as const, label: "MARKETS", color: "cyan" },
+    { id: "whales" as const, label: "WHALE TRADES", color: "magenta" },
+    { id: "explorer" as const, label: "SEARCH", color: "yellow" },
+    { id: "arbitrage" as const, label: "ARBITRAGE", color: "green" },
   ];
 
   return (
@@ -111,6 +113,8 @@ export default function Dashboard() {
                         ? "rgba(0, 255, 255, 0.3)"
                         : tab.color === "magenta"
                         ? "rgba(255, 0, 255, 0.3)"
+                        : tab.color === "green"
+                        ? "rgba(0, 255, 0, 0.3)"
                         : "rgba(255, 255, 0, 0.3)"
                     }`,
                   }
@@ -131,6 +135,7 @@ export default function Dashboard() {
           transition={{ duration: 0.3 }}
         >
           {activeTab === "markets" && <MarketActivity />}
+          {activeTab === "whales" && <WhaleTracker />}
           {activeTab === "explorer" && <MarketExplorer />}
           {activeTab === "arbitrage" && (
             <OpportunityFeed
