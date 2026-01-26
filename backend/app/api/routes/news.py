@@ -1,94 +1,60 @@
 from __future__ import annotations
-"""News front-runner endpoints."""
+"""Market intelligence endpoints - real trading signals from Polymarket activity."""
 from datetime import datetime
+from typing import Optional, List
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.core.news_tracker import NewsTracker, NewsItem, MarketSignal
+from app.core.market_intelligence import get_market_intelligence, MarketSignal as IntelSignal
 
-router = APIRouter(prefix="/news", tags=["news"])
-
-# Global tracker instance
-_tracker: NewsTracker | None = None
+router = APIRouter(prefix="/news", tags=["market-intelligence"])
 
 
-def get_tracker() -> NewsTracker:
-    global _tracker
-    if _tracker is None:
-        _tracker = NewsTracker()
-    return _tracker
+class SignalResponse(BaseModel):
+    """Response model for market signals."""
 
-
-class NewsItemResponse(BaseModel):
     id: str
+    type: str  # "whale_trade", "price_spike", "volume_surge"
     title: str
     summary: str
-    source: str
-    url: str
-    published_at: datetime
-    relevance_score: float
-    sentiment: str
-    related_markets: list[str]
-    keywords: list[str]
-
-
-class MarketSignalResponse(BaseModel):
-    news_id: str
-    news_title: str
-    market_id: str
     market_question: str
-    signal: str
+    market_url: str
+    signal: str  # "BUY_YES", "BUY_NO", "SELL_YES", "SELL_NO", "WATCH"
     confidence: float
-    current_price: float | None = None
-    target_price: float | None = None
+    current_price: Optional[float] = None
     reasoning: str
     detected_at: datetime
 
 
-@router.get("", response_model=list[NewsItemResponse])
-async def get_recent_news(limit: int = 20):
-    """Get recent news relevant to prediction markets."""
-    tracker = get_tracker()
-    news = await tracker.fetch_recent_news(limit=limit)
+@router.get("", response_model=List[SignalResponse])
+async def get_market_signals(limit: int = 20):
+    """
+    Get trading signals derived from real Polymarket activity.
+
+    Signals are generated from:
+    - Whale trades (large positions >$5K)
+    - Extreme prices (strong conviction markets)
+    - Volume surges (active markets)
+
+    Each signal includes:
+    - The market question and direct Polymarket URL
+    - Signal type (BUY_YES, BUY_NO, etc.) and confidence
+    - Reasoning explaining the signal
+    """
+    intel = get_market_intelligence()
+    signals = await intel.get_signals(limit=limit)
 
     return [
-        NewsItemResponse(
-            id=n.id,
-            title=n.title,
-            summary=n.summary,
-            source=n.source,
-            url=n.url,
-            published_at=n.published_at,
-            relevance_score=n.relevance_score,
-            sentiment=n.sentiment,
-            related_markets=n.related_markets,
-            keywords=n.keywords,
-        )
-        for n in news
-    ]
-
-
-@router.get("/signals", response_model=list[MarketSignalResponse])
-async def get_trading_signals():
-    """Get trading signals derived from news analysis."""
-    tracker = get_tracker()
-
-    # Fetch news first if not already done
-    if not tracker.recent_news:
-        await tracker.fetch_recent_news()
-
-    signals = await tracker.generate_signals()
-
-    return [
-        MarketSignalResponse(
-            news_id=s.news_id,
-            news_title=s.news_title,
-            market_id=s.market_id,
+        SignalResponse(
+            id=s.id,
+            type=s.type,
+            title=s.title,
+            summary=s.summary,
             market_question=s.market_question,
+            market_url=s.market_url,
             signal=s.signal,
             confidence=s.confidence,
             current_price=s.current_price,
-            target_price=s.target_price,
             reasoning=s.reasoning,
             detected_at=s.detected_at,
         )
@@ -96,15 +62,28 @@ async def get_trading_signals():
     ]
 
 
+@router.get("/signals", response_model=List[SignalResponse])
+async def get_trading_signals():
+    """
+    Alias for main signals endpoint (backward compatibility).
+
+    Returns trading signals from market activity.
+    """
+    return await get_market_signals(limit=15)
+
+
 @router.post("/refresh")
-async def refresh_news():
-    """Force refresh news and signals."""
-    tracker = get_tracker()
-    news = await tracker.fetch_recent_news()
-    signals = await tracker.generate_signals()
+async def refresh_signals():
+    """Force refresh of market intelligence signals."""
+    intel = get_market_intelligence()
+    signals = await intel.get_signals(limit=20)
 
     return {
         "status": "refreshed",
-        "news_count": len(news),
         "signals_count": len(signals),
+        "signal_types": {
+            "whale_trade": sum(1 for s in signals if s.type == "whale_trade"),
+            "price_spike": sum(1 for s in signals if s.type == "price_spike"),
+            "volume_surge": sum(1 for s in signals if s.type == "volume_surge"),
+        },
     }

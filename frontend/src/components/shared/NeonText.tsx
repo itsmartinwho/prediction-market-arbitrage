@@ -5,7 +5,7 @@ import { ReactNode } from "react";
 
 interface NeonTextProps {
   children: ReactNode;
-  color?: "cyan" | "magenta" | "green" | "yellow";
+  color?: "cyan" | "magenta" | "green" | "yellow" | "orange";
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   animate?: boolean;
   className?: string;
@@ -16,6 +16,7 @@ const colorClasses = {
   magenta: "text-neon-magenta",
   green: "text-neon-green",
   yellow: "text-neon-yellow",
+  orange: "text-neon-orange",
 };
 
 const sizeClasses = {

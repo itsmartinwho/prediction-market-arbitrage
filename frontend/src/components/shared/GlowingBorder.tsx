@@ -5,7 +5,7 @@ import { ReactNode } from "react";
 
 interface GlowingBorderProps {
   children: ReactNode;
-  color?: "cyan" | "magenta" | "green" | "red" | "yellow";
+  color?: "cyan" | "magenta" | "green" | "red" | "yellow" | "orange";
   className?: string;
   animate?: boolean;
 }
@@ -35,6 +35,11 @@ const colorMap = {
     border: "border-neon-yellow/30",
     glow: "shadow-neon-yellow",
     hoverBorder: "hover:border-neon-yellow/60",
+  },
+  orange: {
+    border: "border-neon-orange/30",
+    glow: "shadow-neon-orange",
+    hoverBorder: "hover:border-neon-orange/60",
   },
 };
 

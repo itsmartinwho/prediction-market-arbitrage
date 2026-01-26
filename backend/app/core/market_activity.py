@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""Real market activity using Polymarket Gamma API."""
+"""Real market activity using Polymarket Gamma API with correct URL resolution."""
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.clients.polymarket.gamma_client import GammaClient
 from app.models.market import Market
+from app.core.event_slug_cache import get_event_slug_cache
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +37,21 @@ class MarketActivity:
 
     def __init__(self):
         self.gamma = GammaClient()
+        self.slug_cache = get_event_slug_cache()
         self._cache: Optional[List[Market]] = None
         self._cache_time: Optional[datetime] = None
         self._cache_ttl = timedelta(seconds=30)
 
+    async def _ensure_slug_cache_fresh(self):
+        """Ensure the event slug cache is populated."""
+        if self.slug_cache.is_stale:
+            await self.slug_cache.refresh_cache()
+
     async def _get_markets(self, force_refresh: bool = False) -> List[Market]:
         """Get markets with caching."""
+        # Ensure slug cache is fresh for URL resolution
+        await self._ensure_slug_cache_fresh()
+
         now = datetime.utcnow()
 
         if (not force_refresh
@@ -61,12 +71,14 @@ class MarketActivity:
             return self._cache or []
 
     def _market_to_summary(self, market: Market) -> MarketSummary:
-        """Convert Market to MarketSummary."""
-        # Build Polymarket URL - must use slug, not id
-        # If no slug, the market won't have a valid URL
-        polymarket_url = ""
-        if market.slug:
-            polymarket_url = f"https://polymarket.com/event/{market.slug}"
+        """Convert Market to MarketSummary with correct Polymarket URL."""
+        # Use the slug cache to get correct event_slug URL
+        # The cache maps market slugs (from Gamma API) to event slugs (needed for URLs)
+        polymarket_url = self.slug_cache.build_polymarket_url(
+            condition_id=market.condition_id,
+            market_slug=market.slug,
+            fallback_slug=market.slug,  # Fallback to market slug if no mapping
+        )
 
         return MarketSummary(
             id=market.id,

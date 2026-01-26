@@ -1,25 +1,19 @@
-export interface NewsItem {
-  id: string;
-  title: string;
-  summary: string;
-  source: string;
-  url: string;
-  published_at: string;
-  relevance_score: number;
-  sentiment: "bullish" | "bearish" | "neutral";
-  related_markets: string[];
-  keywords: string[];
-}
+// Market Intelligence Signal types
+// These are derived from real Polymarket activity, not news
 
 export interface MarketSignal {
-  news_id: string;
-  news_title: string;
-  market_id: string;
+  id: string;
+  type: "whale_trade" | "price_spike" | "volume_surge";
+  title: string;
+  summary: string;
   market_question: string;
-  signal: "BUY_YES" | "BUY_NO" | "SELL_YES" | "SELL_NO";
-  confidence: number;
+  market_url: string;
+  signal: "BUY_YES" | "BUY_NO" | "SELL_YES" | "SELL_NO" | "WATCH";
+  confidence: number; // 0-1
   current_price: number | null;
-  target_price: number | null;
   reasoning: string;
   detected_at: string;
 }
+
+// Backward compatibility - NewsItem is now just a signal
+export type NewsItem = MarketSignal;

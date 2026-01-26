@@ -16,6 +16,7 @@ const config: Config = {
           yellow: "#ffff00",
           green: "#00ff00",
           red: "#ff0044",
+          orange: "#ff8800",
         },
         void: {
           black: "#0a0a0f",
@@ -38,6 +39,10 @@ const config: Config = {
           "0 0 5px theme('colors.neon.green'), 0 0 20px theme('colors.neon.green')",
         "neon-red":
           "0 0 5px theme('colors.neon.red'), 0 0 20px theme('colors.neon.red')",
+        "neon-orange":
+          "0 0 5px theme('colors.neon.orange'), 0 0 20px theme('colors.neon.orange')",
+        "neon-yellow":
+          "0 0 5px theme('colors.neon.yellow'), 0 0 20px theme('colors.neon.yellow')",
       },
       animation: {
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",

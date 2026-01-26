@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { GlowingBorder } from "./GlowingBorder";
 import { NeonText } from "./NeonText";
 
-type TabType = "markets" | "whales" | "explorer" | "arbitrage";
+type TabType = "markets" | "whales" | "signals" | "explorer" | "arbitrage";
 
 interface HelpDrawerProps {
   isOpen: boolean;
@@ -77,6 +77,7 @@ export function HelpDrawer({ isOpen, onClose, activeTab }: HelpDrawerProps) {
             <div className="space-y-6">
               {activeTab === "markets" && <MarketActivityHelp />}
               {activeTab === "whales" && <WhaleTrackerHelp />}
+              {activeTab === "signals" && <SignalsHelp />}
               {activeTab === "explorer" && <MarketExplorerHelp />}
               {activeTab === "arbitrage" && <ArbitrageHelp />}
 
@@ -185,6 +186,46 @@ function WhaleTrackerHelp() {
           <p className="text-gray-400">
             Large buys often signal confidence in an outcome. Track whale
             activity to understand market sentiment shifts.
+          </p>
+        </div>
+      </div>
+    </GlowingBorder>
+  );
+}
+
+function SignalsHelp() {
+  return (
+    <GlowingBorder color="orange" className="p-4">
+      <NeonText color="orange" size="md" className="mb-3">
+        MARKET SIGNALS
+      </NeonText>
+      <div className="space-y-3 text-sm">
+        <div>
+          <div className="text-neon-orange font-semibold mb-1">🐋 WHALE TRADES</div>
+          <p className="text-gray-400">
+            Signals from large trades (&gt;$5K). When big money moves, it often
+            indicates informed positioning. Higher USD = higher confidence.
+          </p>
+        </div>
+        <div>
+          <div className="text-neon-orange font-semibold mb-1">📈 PRICE SPIKES</div>
+          <p className="text-gray-400">
+            Markets with extreme prices (&gt;90% or &lt;10%). Shows strong market
+            consensus. Research before trading against momentum.
+          </p>
+        </div>
+        <div>
+          <div className="text-neon-orange font-semibold mb-1">🔥 VOLUME SURGES</div>
+          <p className="text-gray-400">
+            High-activity markets with significant trading volume. Good
+            liquidity means easier entry and exit for your trades.
+          </p>
+        </div>
+        <div>
+          <div className="text-neon-orange font-semibold mb-1">SIGNAL TYPES</div>
+          <p className="text-gray-400">
+            BUY_YES/BUY_NO = Trade in direction of whale. WATCH = Monitor only,
+            don&apos;t trade against momentum without research.
           </p>
         </div>
       </div>
