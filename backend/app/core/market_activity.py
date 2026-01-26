@@ -5,23 +5,32 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from pydantic import BaseModel
 
-from app.clients.polymarket.gamma_client import GammaClient
-from app.models.market import Market
+from app.clients.polymarket.gamma_client import GammaClient, Event
+from app.core.news_fetcher import get_news_fetcher, NewsArticle
 
 logger = logging.getLogger(__name__)
 
 
-class MarketSummary(BaseModel):
-    """A market summary for display."""
+class EventNews(BaseModel):
+    """A news article related to an event."""
+    title: str
+    source: str
+    url: str
+
+
+class EventSummary(BaseModel):
+    """An event summary for display (one entry per Polymarket event)."""
     id: str
-    question: str
-    slug: Optional[str] = None
+    title: str
+    slug: str
     yes_price: Optional[float] = None
     no_price: Optional[float] = None
     volume: float = 0.0
     liquidity: float = 0.0
     end_date: Optional[datetime] = None
+    market_count: int = 1
     polymarket_url: str = ""
+    news: Optional[EventNews] = None
 
 
 class MarketActivity:
@@ -29,21 +38,21 @@ class MarketActivity:
     Provides real market activity data from Polymarket.
 
     Uses the Gamma Events API to fetch:
-    - Hot markets (highest volume)
-    - Price movers (significant price changes implied by YES/NO imbalance)
-    - Markets closing soon
+    - Hot events (highest volume)
+    - Price movers (events with extreme prices)
+    - Events closing soon
 
-    The Events API returns event_slug directly, so no slug cache is needed.
+    Returns one entry per event (no duplicates).
     """
 
     def __init__(self):
         self.gamma = GammaClient()
-        self._cache: Optional[List[Market]] = None
+        self._cache: Optional[List[Event]] = None
         self._cache_time: Optional[datetime] = None
         self._cache_ttl = timedelta(seconds=30)
 
-    async def _get_markets(self, force_refresh: bool = False) -> List[Market]:
-        """Get markets with caching."""
+    async def _get_events(self, force_refresh: bool = False) -> List[Event]:
+        """Get events with caching."""
         now = datetime.utcnow()
 
         if (not force_refresh
@@ -53,154 +62,177 @@ class MarketActivity:
             return self._cache
 
         try:
-            markets = await self.gamma.get_all_active_markets()
-            self._cache = markets
+            events = await self.gamma.get_all_active_events(max_events=300)
+            self._cache = events
             self._cache_time = now
-            logger.info(f"Fetched {len(markets)} active markets from Gamma Events API")
-            return markets
+            logger.info(f"Fetched {len(events)} active events from Gamma Events API")
+            return events
         except Exception as e:
-            logger.error(f"Failed to fetch markets: {e}")
+            logger.error(f"Failed to fetch events: {e}")
             return self._cache or []
 
-    def _market_to_summary(self, market: Market) -> MarketSummary:
-        """Convert Market to MarketSummary with correct Polymarket URL."""
-        # The market.slug now contains event_slug from the Events API
-        # This is the correct slug needed for Polymarket URLs
-        polymarket_url = f"https://polymarket.com/event/{market.slug}" if market.slug else ""
-
-        return MarketSummary(
-            id=market.id,
-            question=market.question,
-            slug=market.slug,
-            yes_price=market.yes_price,
-            no_price=market.no_price,
-            volume=market.volume or 0.0,
-            liquidity=market.liquidity or 0.0,
-            end_date=market.end_date,
-            polymarket_url=polymarket_url,
+    def _event_to_summary(self, event: Event, news: Optional[EventNews] = None) -> EventSummary:
+        """Convert Event to EventSummary for display."""
+        return EventSummary(
+            id=event.id,
+            title=event.title,
+            slug=event.slug,
+            yes_price=event.yes_price,
+            no_price=event.no_price,
+            volume=event.volume or 0.0,
+            liquidity=event.liquidity or 0.0,
+            end_date=event.end_date,
+            market_count=event.market_count,
+            polymarket_url=event.polymarket_url,
+            news=news,
         )
 
-    async def get_hot_markets(self, limit: int = 20) -> List[MarketSummary]:
+    async def _enrich_with_news(self, events: List[Event], limit: int) -> List[EventSummary]:
+        """Convert events to summaries and fetch news for each."""
+        import asyncio
+        news_fetcher = get_news_fetcher()
+        summaries = []
+
+        # Fetch news for all events in parallel (with limit)
+        async def get_news_for_event(event: Event) -> EventSummary:
+            try:
+                articles = await news_fetcher.get_news_for_market(event.title, limit=1)
+                news = None
+                if articles:
+                    article = articles[0]
+                    news = EventNews(
+                        title=article.title,
+                        source=article.source,
+                        url=article.url,
+                    )
+                return self._event_to_summary(event, news)
+            except Exception as e:
+                logger.warning(f"Failed to fetch news for '{event.title}': {e}")
+                return self._event_to_summary(event)
+
+        # Process events in parallel batches of 5 to avoid overwhelming the API
+        batch_size = 5
+        for i in range(0, min(len(events), limit), batch_size):
+            batch = events[i:i + batch_size]
+            batch_results = await asyncio.gather(*[get_news_for_event(e) for e in batch])
+            summaries.extend(batch_results)
+
+        return summaries[:limit]
+
+    async def get_hot_markets(self, limit: int = 20, include_news: bool = True) -> List[EventSummary]:
         """
-        Get markets with highest trading volume.
+        Get events with highest trading volume.
 
-        These are the most actively traded markets.
+        These are the most actively traded events.
         """
-        markets = await self._get_markets()
+        events = await self._get_events()
 
-        # Already sorted by volume from the API, but sort again to be sure
-        sorted_markets = sorted(
-            markets,
-            key=lambda m: m.volume or 0,
-            reverse=True
-        )
+        # Already sorted by volume from the API
+        if include_news:
+            return await self._enrich_with_news(events, limit)
+        return [self._event_to_summary(e) for e in events[:limit]]
 
-        return [self._market_to_summary(m) for m in sorted_markets[:limit]]
-
-    async def get_price_movers(self, limit: int = 20) -> List[MarketSummary]:
+    async def get_price_movers(self, limit: int = 20, include_news: bool = True) -> List[EventSummary]:
         """
-        Get markets with most extreme prices (furthest from 50/50).
+        Get events with most extreme prices (furthest from 50/50).
 
-        Markets where YES or NO is trading far from 0.50 indicate
-        strong market conviction. This is a proxy for "price movement"
-        since we don't have historical price data.
+        Events where YES or NO is trading far from 0.50 indicate
+        strong market conviction.
         """
-        markets = await self._get_markets()
+        events = await self._get_events()
 
-        def price_extremity(m: Market) -> float:
+        def price_extremity(e: Event) -> float:
             """How far is YES price from 0.50?"""
-            if m.yes_price is None:
+            if e.yes_price is None:
                 return 0
-            return abs(m.yes_price - 0.5)
+            return abs(e.yes_price - 0.5)
 
         # Sort by how extreme the price is
-        sorted_markets = sorted(
-            markets,
+        sorted_events = sorted(
+            [e for e in events if e.yes_price is not None],
             key=price_extremity,
             reverse=True
         )
 
-        return [self._market_to_summary(m) for m in sorted_markets[:limit]]
+        if include_news:
+            return await self._enrich_with_news(sorted_events, limit)
+        return [self._event_to_summary(e) for e in sorted_events[:limit]]
 
-    async def get_closing_soon(self, days: int = 7, limit: int = 20) -> List[MarketSummary]:
+    async def get_closing_soon(self, days: int = 7, limit: int = 20, include_news: bool = True) -> List[EventSummary]:
         """
-        Get markets closing within the specified number of days.
+        Get events closing within the specified number of days.
 
         These are time-sensitive opportunities.
         """
-        markets = await self._get_markets()
+        events = await self._get_events()
         now = datetime.utcnow()
         cutoff = now + timedelta(days=days)
 
-        # Filter to markets with end_date within range
-        closing_markets = []
-        for m in markets:
-            if m.end_date:
-                # Handle both datetime and string end_date
-                end = m.end_date
-                if isinstance(end, str):
-                    try:
-                        end = datetime.fromisoformat(end.replace('Z', '+00:00'))
-                    except Exception:
-                        continue
-
-                # Check if within range (after now, before cutoff)
+        # Filter to events with end_date within range
+        closing_events = []
+        for e in events:
+            if e.end_date:
+                # Handle timezone-aware datetimes
+                end = e.end_date
                 if hasattr(end, 'replace'):
                     end_naive = end.replace(tzinfo=None)
                 else:
                     end_naive = end
 
                 if now < end_naive < cutoff:
-                    closing_markets.append(m)
+                    closing_events.append(e)
 
         # Sort by end_date ascending (soonest first)
-        closing_markets.sort(
-            key=lambda m: m.end_date if m.end_date else datetime.max
+        closing_events.sort(
+            key=lambda e: e.end_date if e.end_date else datetime.max
         )
 
-        return [self._market_to_summary(m) for m in closing_markets[:limit]]
+        if include_news:
+            return await self._enrich_with_news(closing_events, limit)
+        return [self._event_to_summary(e) for e in closing_events[:limit]]
 
-    async def get_new_markets(self, limit: int = 20) -> List[MarketSummary]:
+    async def get_new_markets(self, limit: int = 20) -> List[EventSummary]:
         """
-        Get recently created markets.
+        Get recently created events.
 
-        Note: Gamma API doesn't provide creation date, so this returns
-        markets with lowest volume as a proxy for "new" markets.
+        Returns events with lowest volume as a proxy for "new" events.
         """
-        markets = await self._get_markets()
+        events = await self._get_events()
 
         # Sort by volume ascending (lowest volume = likely newer)
-        sorted_markets = sorted(
-            markets,
-            key=lambda m: m.volume or float('inf')
+        sorted_events = sorted(
+            events,
+            key=lambda e: e.volume or float('inf')
         )
 
-        # Filter out zero-volume markets (might be broken)
-        active_markets = [m for m in sorted_markets if (m.volume or 0) > 0]
+        # Filter out zero-volume events
+        active_events = [e for e in sorted_events if (e.volume or 0) > 0]
 
-        return [self._market_to_summary(m) for m in active_markets[:limit]]
+        return [self._event_to_summary(e) for e in active_events[:limit]]
 
-    async def search_markets(self, query: str, limit: int = 20) -> List[MarketSummary]:
+    async def search_markets(self, query: str, limit: int = 20, include_news: bool = True) -> List[EventSummary]:
         """
-        Search markets by keyword in question.
+        Search events by keyword in title.
 
-        Simple text search - matches if query appears in market question.
+        Simple text search - matches if query appears in event title.
         """
-        markets = await self._get_markets()
+        events = await self._get_events()
         query_lower = query.lower().strip()
 
         if not query_lower:
             return []
 
         matching = [
-            m for m in markets
-            if query_lower in (m.question or "").lower()
+            e for e in events
+            if query_lower in (e.title or "").lower()
         ]
 
         # Sort matches by volume (most liquid first)
-        matching.sort(key=lambda m: m.volume or 0, reverse=True)
+        matching.sort(key=lambda e: e.volume or 0, reverse=True)
 
-        return [self._market_to_summary(m) for m in matching[:limit]]
+        if include_news:
+            return await self._enrich_with_news(matching, limit)
+        return [self._event_to_summary(e) for e in matching[:limit]]
 
     async def close(self):
         """Close the client."""

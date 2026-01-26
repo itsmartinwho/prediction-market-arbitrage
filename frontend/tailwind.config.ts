@@ -26,6 +26,7 @@ const config: Config = {
           gray: "#1a1a2e",
           lighter: "#2a2a4e",
           border: "#3a3a5e",
+          surface: "#16162a",
         },
       },
       fontFamily: {

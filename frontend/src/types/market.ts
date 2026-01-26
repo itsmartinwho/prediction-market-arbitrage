@@ -1,13 +1,21 @@
+export interface MarketNews {
+  title: string;
+  source: string;
+  url: string;
+}
+
 export interface MarketSummary {
   id: string;
-  question: string;
+  title: string;  // Event title (was "question")
   slug: string | null;
   yes_price: number | null;
   no_price: number | null;
   volume: number;
   liquidity: number;
   end_date: string | null;
+  market_count: number;  // Number of outcomes in this event
   polymarket_url: string;
+  news: MarketNews | null;
 }
 
 export interface MarketListResponse {

@@ -50,35 +50,47 @@ const CATEGORIES = [
 
 function MarketCard({ market, index }: { market: MarketSummary; index: number }) {
   return (
-    <motion.a
-      href={market.polymarket_url}
-      target="_blank"
-      rel="noopener noreferrer"
+    <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.02 }}
-      className="block p-4 bg-dark-surface rounded-lg border border-dark-border hover:border-neon-yellow/40 transition-all duration-200"
+      className="p-4 bg-dark-surface rounded-lg border border-dark-border hover:border-neon-yellow/40 transition-all duration-200"
     >
-      {/* Market Question */}
-      <h3 className="text-sm font-medium text-white mb-3 line-clamp-2 hover:text-neon-yellow transition-colors">
-        {market.question}
-      </h3>
+      {/* Event Title */}
+      <a
+        href={market.polymarket_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block"
+      >
+        <h3 className="text-sm font-medium text-white mb-3 line-clamp-2 hover:text-neon-yellow transition-colors">
+          {market.title}
+        </h3>
+      </a>
 
       {/* Prices and Volume */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-500">YES:</span>
-            <span className="text-neon-green font-mono text-sm">
-              {formatPrice(market.yes_price)}
+          {market.market_count === 1 ? (
+            <>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">YES:</span>
+                <span className="text-neon-green font-mono text-sm">
+                  {formatPrice(market.yes_price)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">NO:</span>
+                <span className="text-neon-red font-mono text-sm">
+                  {formatPrice(market.no_price)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <span className="text-xs text-neon-yellow">
+              {market.market_count} outcomes
             </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-500">NO:</span>
-            <span className="text-neon-red font-mono text-sm">
-              {formatPrice(market.no_price)}
-            </span>
-          </div>
+          )}
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{formatVolume(market.volume)}</span>
@@ -87,7 +99,27 @@ function MarketCard({ market, index }: { market: MarketSummary; index: number })
           )}
         </div>
       </div>
-    </motion.a>
+
+      {/* Related News */}
+      {market.news && (
+        <a
+          href={market.news.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block mt-3 pt-3 border-t border-dark-border/50"
+        >
+          <div className="flex items-start gap-2">
+            <span className="text-neon-orange text-xs shrink-0">NEWS</span>
+            <p className="text-xs text-gray-400 line-clamp-2 hover:text-gray-300 transition-colors">
+              {market.news.title}
+            </p>
+          </div>
+          <span className="text-xs text-gray-600 mt-1 block">
+            via {market.news.source}
+          </span>
+        </a>
+      )}
+    </motion.div>
   );
 }
 
