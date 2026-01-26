@@ -60,7 +60,7 @@ function MarketCard({ market, index }: { market: MarketSummary; index: number })
         className="block"
       >
         <h3 className="text-sm font-medium text-white mb-3 line-clamp-2 hover:text-neon-cyan transition-colors">
-          {market.title}
+          {market.title || (market as any).question || "Untitled Market"}
         </h3>
       </a>
 
