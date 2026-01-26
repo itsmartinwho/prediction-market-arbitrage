@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 from app.clients.polymarket.data_client import DataClient, Trade
 from app.clients.polymarket.gamma_client import GammaClient
-from app.core.event_slug_cache import get_event_slug_cache
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ class MarketIntelligence:
     Derives trading signals from real Polymarket activity.
 
     This replaces the mock news tracker with actionable signals
-    based on actual market data from the Polymarket Data API.
+    based on actual market data from the Polymarket APIs.
 
     Signal types:
     - whale_trade: Large trades indicating informed positioning
@@ -45,7 +44,6 @@ class MarketIntelligence:
     def __init__(self):
         self.data_client = DataClient()
         self.gamma_client = GammaClient()
-        self.slug_cache = get_event_slug_cache()
         self._recent_signals: List[MarketSignal] = []
 
     async def get_signals(self, limit: int = 20) -> List[MarketSignal]:
@@ -56,19 +54,15 @@ class MarketIntelligence:
         """
         signals = []
 
-        # Ensure slug cache is fresh
-        if self.slug_cache.is_stale:
-            await self.slug_cache.refresh_cache()
-
-        # 1. Whale Trade Signals (most actionable)
+        # 1. Whale Trade Signals (most actionable) - uses Data API with event_slug
         whale_signals = await self._get_whale_signals(limit=12)
         signals.extend(whale_signals)
 
-        # 2. Price Movement Signals
+        # 2. Price Movement Signals - uses Events API with event_slug
         price_signals = await self._get_price_signals(limit=5)
         signals.extend(price_signals)
 
-        # 3. High Volume Signals
+        # 3. High Volume Signals - uses Events API with event_slug
         volume_signals = await self._get_volume_signals(limit=5)
         signals.extend(volume_signals)
 
@@ -110,7 +104,7 @@ class MarketIntelligence:
                         title=f"${trade.usd_value:,.0f} {trade.side} {trade.outcome}",
                         summary=f"{trade.trader_display_name} {action_text} ${trade.usd_value:,.0f} of {trade.outcome} @ {trade.price:.2f}",
                         market_question=trade.title,
-                        market_url=trade.polymarket_url,
+                        market_url=trade.polymarket_url,  # Data API has event_slug
                         signal=signal,
                         confidence=confidence,
                         current_price=trade.price,
@@ -136,6 +130,7 @@ class MarketIntelligence:
     async def _get_price_signals(self, limit: int = 5) -> List[MarketSignal]:
         """Generate signals from markets with extreme prices."""
         try:
+            # get_all_active_markets now uses Events API with event_slug
             markets = await self.gamma_client.get_all_active_markets()
 
             # Find markets with extreme prices (>90% or <10%)
@@ -155,12 +150,8 @@ class MarketIntelligence:
                 is_high = (market.yes_price or 0) > 0.5
                 price_pct = (market.yes_price or 0) * 100
 
-                # Build URL using cache
-                url = self.slug_cache.build_polymarket_url(
-                    condition_id=market.condition_id,
-                    market_slug=market.slug,
-                    fallback_slug=market.slug,
-                )
+                # market.slug now contains event_slug from Events API
+                url = f"https://polymarket.com/event/{market.slug}" if market.slug else ""
 
                 signals.append(
                     MarketSignal(
@@ -191,23 +182,18 @@ class MarketIntelligence:
     async def _get_volume_signals(self, limit: int = 5) -> List[MarketSignal]:
         """Generate signals from high-volume markets."""
         try:
+            # get_all_active_markets now uses Events API with event_slug
             markets = await self.gamma_client.get_all_active_markets()
 
-            # Sort by volume descending
-            markets.sort(key=lambda m: m.volume or 0, reverse=True)
-
+            # Already sorted by volume, but filter for minimum
             signals = []
-            for market in markets[:limit]:
+            for market in markets[:limit * 2]:
                 volume = market.volume or 0
                 if volume < 100000:  # Skip low volume markets
                     continue
 
-                # Build URL using cache
-                url = self.slug_cache.build_polymarket_url(
-                    condition_id=market.condition_id,
-                    market_slug=market.slug,
-                    fallback_slug=market.slug,
-                )
+                # market.slug now contains event_slug from Events API
+                url = f"https://polymarket.com/event/{market.slug}" if market.slug else ""
 
                 # Format volume
                 if volume >= 1_000_000:
@@ -234,6 +220,9 @@ class MarketIntelligence:
                         },
                     )
                 )
+
+                if len(signals) >= limit:
+                    break
 
             return signals
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""Real market activity using Polymarket Gamma API with correct URL resolution."""
+"""Real market activity using Polymarket Gamma Events API."""
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 from app.clients.polymarket.gamma_client import GammaClient
 from app.models.market import Market
-from app.core.event_slug_cache import get_event_slug_cache
 
 logger = logging.getLogger(__name__)
 
@@ -29,29 +28,22 @@ class MarketActivity:
     """
     Provides real market activity data from Polymarket.
 
-    Uses the Gamma API to fetch:
+    Uses the Gamma Events API to fetch:
     - Hot markets (highest volume)
     - Price movers (significant price changes implied by YES/NO imbalance)
     - Markets closing soon
+
+    The Events API returns event_slug directly, so no slug cache is needed.
     """
 
     def __init__(self):
         self.gamma = GammaClient()
-        self.slug_cache = get_event_slug_cache()
         self._cache: Optional[List[Market]] = None
         self._cache_time: Optional[datetime] = None
         self._cache_ttl = timedelta(seconds=30)
 
-    async def _ensure_slug_cache_fresh(self):
-        """Ensure the event slug cache is populated."""
-        if self.slug_cache.is_stale:
-            await self.slug_cache.refresh_cache()
-
     async def _get_markets(self, force_refresh: bool = False) -> List[Market]:
         """Get markets with caching."""
-        # Ensure slug cache is fresh for URL resolution
-        await self._ensure_slug_cache_fresh()
-
         now = datetime.utcnow()
 
         if (not force_refresh
@@ -64,7 +56,7 @@ class MarketActivity:
             markets = await self.gamma.get_all_active_markets()
             self._cache = markets
             self._cache_time = now
-            logger.info(f"Fetched {len(markets)} active markets from Gamma API")
+            logger.info(f"Fetched {len(markets)} active markets from Gamma Events API")
             return markets
         except Exception as e:
             logger.error(f"Failed to fetch markets: {e}")
@@ -72,13 +64,9 @@ class MarketActivity:
 
     def _market_to_summary(self, market: Market) -> MarketSummary:
         """Convert Market to MarketSummary with correct Polymarket URL."""
-        # Use the slug cache to get correct event_slug URL
-        # The cache maps market slugs (from Gamma API) to event slugs (needed for URLs)
-        polymarket_url = self.slug_cache.build_polymarket_url(
-            condition_id=market.condition_id,
-            market_slug=market.slug,
-            fallback_slug=market.slug,  # Fallback to market slug if no mapping
-        )
+        # The market.slug now contains event_slug from the Events API
+        # This is the correct slug needed for Polymarket URLs
+        polymarket_url = f"https://polymarket.com/event/{market.slug}" if market.slug else ""
 
         return MarketSummary(
             id=market.id,
@@ -100,7 +88,7 @@ class MarketActivity:
         """
         markets = await self._get_markets()
 
-        # Sort by volume descending
+        # Already sorted by volume from the API, but sort again to be sure
         sorted_markets = sorted(
             markets,
             key=lambda m: m.volume or 0,
