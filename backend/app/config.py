@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     telegram_chat_id: Optional[str] = None
 
     # Arbitrage Detection
-    min_profit_threshold: float = 0.025  # 2.5% minimum edge
+    min_profit_threshold: float = 0.01  # 1% minimum edge (lowered to surface more opportunities)
     scan_interval_seconds: int = 5
 
     # Risk Management (conservative for paper trading)

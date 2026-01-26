@@ -12,6 +12,7 @@ interface OpportunityCardProps {
 
 export function OpportunityCard({ opportunity, index }: OpportunityCardProps) {
   const isProfitable = opportunity.net_profit > 0;
+  const isLowEdge = opportunity.edge_percent < 2;
   const edgeColor =
     opportunity.edge_percent >= 3
       ? "green"
@@ -37,6 +38,12 @@ export function OpportunityCard({ opportunity, index }: OpportunityCardProps) {
             </h3>
           </div>
           <div className="flex items-center gap-2">
+            {/* Low Edge Warning Badge */}
+            {isLowEdge && (
+              <span className="px-2 py-1 text-xs font-bold rounded bg-neon-red/20 text-neon-red border border-neon-red/30">
+                LOW EDGE
+              </span>
+            )}
             <span
               className={`
               px-2 py-1 text-xs font-bold rounded
@@ -49,6 +56,13 @@ export function OpportunityCard({ opportunity, index }: OpportunityCardProps) {
             </span>
           </div>
         </div>
+
+        {/* Low Edge Warning Message */}
+        {isLowEdge && (
+          <div className="mb-3 p-2 bg-neon-red/10 border border-neon-red/20 rounded text-xs text-neon-red">
+            ⚠ Edge below 2% - consider fees and slippage before trading
+          </div>
+        )}
 
         {/* Prices Grid */}
         <div className="grid grid-cols-3 gap-4 mb-3">
