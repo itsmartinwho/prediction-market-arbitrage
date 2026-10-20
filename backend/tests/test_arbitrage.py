@@ -113,3 +113,21 @@ def test_the_app_has_no_trading_or_signing_code():
         if banned.search(p.read_text())
     ]
     assert hits == []
+
+
+def test_the_only_post_is_the_order_book_read():
+    """Every request is a GET except CLOB's /books, which posts a list of token
+    ids to read their order books. Fail if any other POST appears."""
+    app_dir = pathlib.Path(__file__).resolve().parent.parent / "app"
+    posts = []
+    for p in app_dir.rglob("*.py"):
+        for line in p.read_text().splitlines():
+            code = line.split("#", 1)[0].strip()
+            if code.startswith("@"):  # this API's own POST routes, not outgoing requests
+                continue
+            if re.search(r"\.post\(|post_json\(", code) and "def post_json" not in code:
+                posts.append((p.name, code))
+    # http.py's helper itself, and the one call that uses it
+    assert all(name == "http.py" or "/books" in code for name, code in posts), posts
+    callers = [code for name, code in posts if name != "http.py"]
+    assert len(callers) == 1 and "/books" in callers[0], callers

@@ -1,6 +1,6 @@
 from __future__ import annotations
 """Arbitrage opportunity models."""
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pydantic import BaseModel, Field
 import hashlib
@@ -36,7 +36,7 @@ class Opportunity(BaseModel):
     max_size: float | None = None  # Max size at these prices
 
     # Metadata
-    detected_at: datetime = Field(default_factory=datetime.utcnow)
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     platform: str = "polymarket"
 
     @property

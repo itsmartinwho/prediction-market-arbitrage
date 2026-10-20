@@ -1,9 +1,11 @@
 """News fetcher using Google News RSS feeds."""
 from __future__ import annotations
+import asyncio
 import logging
 import re
+import time
 from datetime import datetime
-from typing import Optional, List
+from typing import Dict, Iterable, List, Optional
 from urllib.parse import quote_plus
 import httpx
 from pydantic import BaseModel
@@ -24,34 +26,82 @@ class NewsArticle(BaseModel):
 
 class NewsFetcher:
     """
-    Fetches relevant news articles using Google News RSS.
+    Fetches recent headlines for market titles from Google News RSS.
 
-    This provides a free, no-API-key solution for getting
-    recent news related to prediction market topics.
+    Free and keyless. Headlines are decoration: they are fetched a few at a
+    time under a time budget, cached for ten minutes, and a market whose
+    headline does not arrive in time is shown without one.
     """
 
+    CACHE_TTL_SECONDS = 600
+    CONCURRENCY = 8
+
     def __init__(self):
-        self._client: Optional[httpx.AsyncClient] = None
-        # Cache: query -> (articles, timestamp)
-        self._cache: dict[str, tuple[List[NewsArticle], datetime]] = {}
-        self._cache_ttl_seconds = 300  # 5 minutes
+        # keywords -> (articles, time.time() when fetched)
+        self._cache: Dict[str, tuple] = {}
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=10.0,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)",
-                    "Accept": "application/rss+xml, application/xml, text/xml",
-                },
-            )
-        return self._client
+    @staticmethod
+    def _new_client() -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(5.0, connect=3.0),
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)",
+                "Accept": "application/rss+xml, application/xml, text/xml",
+            },
+            follow_redirects=True,
+        )
 
-    async def close(self):
-        """Close the HTTP client."""
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
+    def _cached(self, key: str) -> Optional[List[NewsArticle]]:
+        hit = self._cache.get(key)
+        if hit and time.time() - hit[1] < self.CACHE_TTL_SECONDS:
+            return hit[0]
+        return None
+
+    async def _fetch(self, client: httpx.AsyncClient, query: str) -> List[NewsArticle]:
+        response = await client.get(GOOGLE_NEWS_RSS_URL.format(query=quote_plus(query)))
+        response.raise_for_status()
+        articles = self._parse_rss(response.text)
+        self._cache[query.lower().strip()] = (articles, time.time())
+        return articles
+
+    async def headlines_for(self, titles: Iterable[str], budget_seconds: float = 4.0) -> Dict[str, NewsArticle]:
+        """The top headline for each title that has one within the budget."""
+        wanted = {t: self._extract_keywords(t) for t in titles}
+        found: Dict[str, NewsArticle] = {}
+        missing: Dict[str, List[str]] = {}
+        for title, keywords in wanted.items():
+            if not keywords:
+                continue
+            cached = self._cached(keywords.lower().strip())
+            if cached is not None:
+                if cached:
+                    found[title] = cached[0]
+            else:
+                missing.setdefault(keywords, []).append(title)
+        if not missing:
+            return found
+
+        gate = asyncio.Semaphore(self.CONCURRENCY)
+        async with self._new_client() as client:
+
+            async def one(keywords: str) -> None:
+                async with gate:
+                    try:
+                        articles = await self._fetch(client, keywords)
+                    except Exception as e:
+                        logger.debug(f"No news for '{keywords}': {e}")
+                        return
+                if articles:
+                    for title in missing[keywords]:
+                        found[title] = articles[0]
+
+            tasks = [asyncio.ensure_future(one(k)) for k in missing]
+            done, pending = await asyncio.wait(tasks, timeout=budget_seconds)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+        return found
 
     def _extract_keywords(self, title: str) -> str:
         """
@@ -129,54 +179,20 @@ class NewsFetcher:
 
         return articles
 
-    async def get_news_for_query(self, query: str, limit: int = 3) -> List[NewsArticle]:
-        """
-        Fetch news articles for a search query.
-
-        Uses caching to avoid excessive requests.
-        """
-        # Check cache
-        cache_key = query.lower().strip()
-        now = datetime.utcnow()
-
-        if cache_key in self._cache:
-            articles, cached_at = self._cache[cache_key]
-            age = (now - cached_at).total_seconds()
-            if age < self._cache_ttl_seconds:
-                return articles[:limit]
-
-        # Fetch from Google News
-        try:
-            client = await self._get_client()
-            encoded_query = quote_plus(query)
-            url = GOOGLE_NEWS_RSS_URL.format(query=encoded_query)
-
-            response = await client.get(url)
-            response.raise_for_status()
-
-            articles = self._parse_rss(response.text)
-
-            # Update cache
-            self._cache[cache_key] = (articles, now)
-
-            logger.debug(f"Fetched {len(articles)} articles for '{query}'")
-            return articles[:limit]
-
-        except Exception as e:
-            logger.warning(f"Failed to fetch news for '{query}': {e}")
-            return []
-
     async def get_news_for_market(self, title: str, limit: int = 1) -> List[NewsArticle]:
-        """
-        Get relevant news articles for a market/event title.
-
-        Extracts keywords from the title and searches Google News.
-        """
+        """Headlines for one market title (at most `limit`)."""
         keywords = self._extract_keywords(title)
         if not keywords:
             return []
-
-        return await self.get_news_for_query(keywords, limit=limit)
+        cached = self._cached(keywords.lower().strip())
+        if cached is not None:
+            return cached[:limit]
+        try:
+            async with self._new_client() as client:
+                return (await self._fetch(client, keywords))[:limit]
+        except Exception as e:
+            logger.warning(f"Failed to fetch news for '{keywords}': {e}")
+            return []
 
 
 # Global singleton

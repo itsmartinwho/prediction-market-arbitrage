@@ -1,29 +1,30 @@
 from __future__ import annotations
 """YES + NO arbitrage detection.
 
-This is the core arbitrage strategy:
-- In a binary market, YES + NO should sum to ~$1.00
-- If YES ask + NO ask < $1.00, buy both for guaranteed profit
-- Example: YES @ $0.48 + NO @ $0.49 = $0.97 total
-- Payout is $1.00, so gross profit = $0.03 (3.09%)
-- After Polymarket's 2% fee on winning side: ~1% net profit
+In a two-outcome market exactly one side pays $1.00. If the best ask for YES
+plus the best ask for NO is under $1.00 by more than the fee, buying both
+locks in the difference:
 
-Key insight: One side ALWAYS wins, so you're guaranteed the $1 payout.
+    cost  = yes_ask + no_ask
+    gross = 1.00 - cost
+    net   = gross - fee        (an assumed flat $0.02 per $1 of payout)
+    edge  = net / cost
+
+Example: YES 0.48 + NO 0.49 = 0.97, so 0.03 gross, 0.01 net, a 1.03% edge.
 """
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import List, Optional
 
 from app.config import get_settings
 from app.models.market import Market
 from app.models.opportunity import Opportunity, OpportunityType
-from app.clients.polymarket import GammaClient, CLOBClient
 
 logger = logging.getLogger(__name__)
 
 
 class ScanDiagnostics:
-    """Tracks why markets are filtered during scanning."""
+    """Counts why markets were set aside during a scan."""
 
     def __init__(self):
         self.reset()
@@ -55,119 +56,80 @@ class ScanDiagnostics:
 
 class YesNoArbitrageDetector:
     """
-    Detects YES+NO arbitrage opportunities on Polymarket.
+    Finds YES + NO < $1 after the fee in two-outcome Polymarket markets.
 
-    Strategy:
-    1. Fetch active binary markets
-    2. For each market, get YES and NO ask prices
-    3. If combined cost < $1.00 - fees, it's an opportunity
-    4. Alert the user for manual execution
-
-    Fee structure:
-    - Polymarket charges 2% on profitable outcomes
-    - Since one side always wins, we pay one 2% fee
-    - Need edge > threshold to be profitable after fees
+    Prices are the best asks from the CLOB order books. When a book is empty
+    or its request fails, the detector can fall back to the prices Gamma lists
+    (last or mid prices, which you cannot necessarily buy at); diagnostics
+    count every fallback. It only reads prices: there is nothing here that
+    trades.
     """
 
-    # Polymarket fee on winning trades
+    # Assumed fee: a flat $0.02 per $1.00 of payout. Not read from Polymarket.
     POLYMARKET_FEE = 0.02
 
     def __init__(
         self,
-        gamma_client: Optional[GammaClient] = None,
-        clob_client: Optional[CLOBClient] = None,
+        gamma_client=None,
+        clob_client=None,
         min_profit_threshold: Optional[float] = None,
         use_gamma_fallback: bool = True,
     ):
-        self.gamma = gamma_client or GammaClient()
-        self.clob = clob_client or CLOBClient()
+        self.gamma = gamma_client
+        self.clob = clob_client
         self.use_gamma_fallback = use_gamma_fallback
-
-        settings = get_settings()
         self.min_profit_threshold = (
-            min_profit_threshold or settings.min_profit_threshold
+            min_profit_threshold if min_profit_threshold is not None
+            else get_settings().min_profit_threshold
         )
-
-        # Diagnostics tracking
         self.diagnostics = ScanDiagnostics()
 
     async def close(self):
-        """Clean up clients."""
-        await self.gamma.close()
-        await self.clob.close()
+        for client in (self.gamma, self.clob):
+            if client is not None:
+                await client.close()
 
-    async def scan_market(self, market: Market) -> Optional[Opportunity]:
-        """
-        Scan a single market for YES+NO arbitrage.
-
-        Args:
-            market: Market to scan
-
-        Returns:
-            Opportunity if profitable, None otherwise
-        """
-        if not market.is_binary:
-            self.diagnostics.not_binary += 1
-            return None
-
-        if not market.yes_token or not market.no_token:
-            self.diagnostics.no_tokens += 1
-            return None
-
-        yes_ask = None
-        no_ask = None
-        used_fallback = False
-
-        # Try CLOB first for accurate prices
-        try:
-            yes_ask = await self.clob.get_best_ask(market.yes_token.token_id)
-            no_ask = await self.clob.get_best_ask(market.no_token.token_id)
-        except Exception as e:
-            logger.warning(f"CLOB error for market {market.id}: {e}")
+    def evaluate(
+        self,
+        market: Market,
+        yes_ask: Optional[float],
+        no_ask: Optional[float],
+        clob_failed: bool = False,
+    ) -> Optional[Opportunity]:
+        """Apply the YES + NO test to one market's asks. Counts into diagnostics."""
+        if clob_failed:
             self.diagnostics.clob_errors += 1
 
-        # Fallback to Gamma API prices if CLOB failed or returned None
+        used_fallback = False
         if (yes_ask is None or no_ask is None) and self.use_gamma_fallback:
             if market.yes_price is not None and market.no_price is not None:
-                yes_ask = market.yes_price
-                no_ask = market.no_price
+                yes_ask, no_ask = market.yes_price, market.no_price
                 used_fallback = True
                 self.diagnostics.used_gamma_fallback += 1
-                logger.debug(f"Using Gamma fallback for market {market.id}")
 
         if yes_ask is None or no_ask is None:
             self.diagnostics.no_clob_liquidity += 1
             return None
 
-        # Calculate profitability
         combined_cost = yes_ask + no_ask
         gross_profit = 1.0 - combined_cost
-
-        # After fee (2% on the winning side = $1.00 * 0.02 = $0.02)
         net_profit = gross_profit - self.POLYMARKET_FEE
-
-        # Edge as percentage of cost
         edge_percent = (net_profit / combined_cost * 100) if combined_cost > 0 else 0
 
-        # Check if profitable
         if net_profit <= 0:
             self.diagnostics.not_profitable += 1
             return None
 
         if edge_percent < self.min_profit_threshold * 100:
             self.diagnostics.below_threshold += 1
-            logger.debug(
-                f"Market {market.id}: edge {edge_percent:.2f}% below threshold {self.min_profit_threshold * 100}%"
-            )
             return None
 
         self.diagnostics.opportunities_found += 1
         logger.info(
-            f"🎯 Found opportunity in {market.question[:50]}... "
-            f"Cost: ${combined_cost:.4f}, Net profit: ${net_profit:.4f} ({edge_percent:.2f}%)"
+            f"Opportunity in {market.question[:50]}: cost ${combined_cost:.4f}, "
+            f"net ${net_profit:.4f} ({edge_percent:.2f}%)"
             f"{' [Gamma prices]' if used_fallback else ''}"
         )
-
         return Opportunity(
             type=OpportunityType.YES_NO,
             market_id=market.id,
@@ -178,98 +140,63 @@ class YesNoArbitrageDetector:
             gross_profit=gross_profit,
             net_profit=net_profit,
             edge_percent=edge_percent,
-            yes_token_id=market.yes_token.token_id,
-            no_token_id=market.no_token.token_id,
-            detected_at=datetime.utcnow(),
+            yes_token_id=market.yes_token.token_id if market.yes_token else None,
+            no_token_id=market.no_token.token_id if market.no_token else None,
+            detected_at=datetime.now(timezone.utc),
             platform="polymarket",
         )
 
-    async def scan_all_markets(self) -> list[Opportunity]:
-        """
-        Scan all active markets for arbitrage opportunities.
+    def _usable(self, market: Market) -> bool:
+        if not market.is_binary:
+            self.diagnostics.not_binary += 1
+            return False
+        if not market.yes_token or not market.no_token:
+            self.diagnostics.no_tokens += 1
+            return False
+        return True
 
-        Returns:
-            List of opportunities sorted by edge (highest first)
+    async def scan_market(self, market: Market) -> Optional[Opportunity]:
+        """Check one market, reading its two order books one by one."""
+        if not self._usable(market):
+            return None
+        yes_ask = no_ask = None
+        failed = False
+        try:
+            yes_ask = await self.clob.get_best_ask(market.yes_token.token_id)
+            no_ask = await self.clob.get_best_ask(market.no_token.token_id)
+        except Exception as e:
+            logger.warning(f"CLOB error for market {market.id}: {e}")
+            failed = True
+        return self.evaluate(market, yes_ask, no_ask, clob_failed=failed)
+
+    async def scan_markets(self, markets: List[Market]) -> List[Opportunity]:
+        """Check many markets, reading all their order books in batches.
+
+        Resets the diagnostics, so they describe this call alone.
         """
-        # Reset diagnostics for this scan
         self.diagnostics.reset()
-
-        logger.info("Starting full market scan...")
-
-        # Fetch all active binary markets
-        markets = await self.gamma.get_all_active_markets()
         self.diagnostics.total_markets = len(markets)
-        logger.info(f"Fetched {len(markets)} active binary markets")
+
+        usable = [m for m in markets if self._usable(m)]
+        token_ids = [t for m in usable for t in (m.yes_token.token_id, m.no_token.token_id)]
+        batch = await self.clob.get_order_books(token_ids)
 
         opportunities = []
-        for market in markets:
-            opp = await self.scan_market(market)
+        for market in usable:
+            yes_id, no_id = market.yes_token.token_id, market.no_token.token_id
+            yes_book, no_book = batch.books.get(yes_id), batch.books.get(no_id)
+            opp = self.evaluate(
+                market,
+                yes_book.best_ask if yes_book else None,
+                no_book.best_ask if no_book else None,
+                clob_failed=yes_id in batch.failed or no_id in batch.failed,
+            )
             if opp:
                 opportunities.append(opp)
-
-        # Sort by edge (best opportunities first)
-        opportunities.sort(key=lambda x: x.edge_percent, reverse=True)
-
-        # Log diagnostics summary
-        diag = self.diagnostics.to_dict()
-        logger.info(
-            f"Scan complete: {diag['opportunities_found']} opportunities from "
-            f"{diag['total_markets']} markets. "
-            f"Filtered: not_profitable={diag['filtered_not_profitable']}, "
-            f"below_threshold={diag['filtered_below_threshold']}, "
-            f"no_liquidity={diag['filtered_no_clob_liquidity']}, "
-            f"gamma_fallback={diag['used_gamma_fallback']}"
-        )
-
-        return opportunities
-
-    async def scan_markets_fast(self, markets: list[Market]) -> list[Opportunity]:
-        """
-        Quick scan using Gamma API prices (less accurate but faster).
-
-        Uses the prices already in the Market objects from Gamma API,
-        rather than fetching fresh order book data from CLOB.
-        Good for initial filtering before detailed scanning.
-        """
-        opportunities = []
-
-        for market in markets:
-            if not market.is_binary:
-                continue
-
-            yes_price = market.yes_price
-            no_price = market.no_price
-
-            if yes_price is None or no_price is None:
-                continue
-
-            combined_cost = yes_price + no_price
-            gross_profit = 1.0 - combined_cost
-            net_profit = gross_profit - self.POLYMARKET_FEE
-            edge_percent = (net_profit / combined_cost * 100) if combined_cost > 0 else 0
-
-            if net_profit > 0 and edge_percent >= self.min_profit_threshold * 100:
-                opportunities.append(
-                    Opportunity(
-                        type=OpportunityType.YES_NO,
-                        market_id=market.id,
-                        market_question=market.question,
-                        yes_price=yes_price,
-                        no_price=no_price,
-                        combined_cost=combined_cost,
-                        gross_profit=gross_profit,
-                        net_profit=net_profit,
-                        edge_percent=edge_percent,
-                        yes_token_id=market.yes_token.token_id if market.yes_token else None,
-                        no_token_id=market.no_token.token_id if market.no_token else None,
-                        detected_at=datetime.utcnow(),
-                        platform="polymarket",
-                    )
-                )
 
         opportunities.sort(key=lambda x: x.edge_percent, reverse=True)
         return opportunities
 
     def get_diagnostics(self) -> dict:
-        """Get the diagnostics from the last scan."""
+        """The diagnostics of the last scan."""
         return self.diagnostics.to_dict()
