@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""Polymarket CLOB API client for order books and trading."""
+"""Polymarket CLOB API client: public, read-only order book data."""
 import logging
 from typing import Any
 import httpx
@@ -15,9 +15,8 @@ class CLOBClient:
     """
     Client for Polymarket CLOB (Central Limit Order Book) API.
 
-    CLOB API provides order book data and trading functionality.
-    - Public endpoints (order books, prices) require no auth
-    - Trading endpoints require L2 API credentials
+    Only the public GET endpoints are used (order books, prices). There is no
+    authentication, signing or order placement anywhere in this app.
 
     API Docs: https://docs.polymarket.com/developers/CLOB
     """
@@ -168,48 +167,3 @@ class CLOBClient:
 
         results = await asyncio.gather(*[fetch_book(tid) for tid in token_ids])
         return {tid: book for tid, book in results if book is not None}
-
-
-# Placeholder for future auto-execution
-class CLOBTradingClient(CLOBClient):
-    """
-    Extended CLOB client with trading capabilities.
-
-    NOT IMPLEMENTED YET - scaffolded for future auto-execution feature.
-
-    To enable:
-    1. Set ENABLE_AUTO_EXECUTE=true
-    2. Configure POLYMARKET_PRIVATE_KEY
-    3. Ensure wallet has USDC on Polygon
-    4. Set allowances for Polymarket contracts
-    """
-
-    def __init__(self, private_key: str | None = None, **kwargs):
-        super().__init__(**kwargs)
-        self.private_key = private_key
-        self._trading_enabled = False
-
-    async def create_order(
-        self,
-        token_id: str,
-        side: str,  # "BUY" or "SELL"
-        size: float,
-        price: float,
-    ) -> dict:
-        """
-        Place a limit order.
-
-        NOT IMPLEMENTED - placeholder for future auto-execution.
-        """
-        raise NotImplementedError(
-            "Auto-execution is not enabled. "
-            "Set ENABLE_AUTO_EXECUTE=true to enable trading."
-        )
-
-    async def cancel_order(self, order_id: str) -> bool:
-        """Cancel an order. NOT IMPLEMENTED."""
-        raise NotImplementedError("Auto-execution is not enabled.")
-
-    async def get_open_orders(self) -> list[dict]:
-        """Get open orders. NOT IMPLEMENTED."""
-        raise NotImplementedError("Auto-execution is not enabled.")

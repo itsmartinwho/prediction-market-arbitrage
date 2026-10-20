@@ -2,7 +2,7 @@
 from __future__ import annotations
 import logging
 from typing import Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 from pydantic import BaseModel
@@ -190,13 +190,14 @@ class DataClient:
     def _parse_trade(self, data: dict) -> Optional[Trade]:
         """Parse raw API response into Trade model."""
         try:
-            # Parse timestamp
-            timestamp_str = data.get("timestamp", "")
-            if isinstance(timestamp_str, str):
-                # Handle ISO format
-                timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            # The Data API sends unix seconds; accept ISO strings too. Always UTC.
+            raw_ts = data.get("timestamp")
+            if isinstance(raw_ts, (int, float)):
+                timestamp = datetime.fromtimestamp(raw_ts, tz=timezone.utc)
+            elif isinstance(raw_ts, str) and raw_ts:
+                timestamp = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
             else:
-                timestamp = datetime.utcnow()
+                timestamp = datetime.now(timezone.utc)
 
             return Trade(
                 proxy_wallet=data.get("proxyWallet"),

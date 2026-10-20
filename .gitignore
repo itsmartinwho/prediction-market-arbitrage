@@ -20,7 +20,8 @@ node_modules/
 .next/
 frontend/.next/
 frontend/out/
-frontend/.vercel
+.vercel/
+*.tsbuildinfo
 
 # IDE
 .vscode/
@@ -32,12 +33,10 @@ frontend/.vercel
 .DS_Store
 Thumbs.db
 
-# Environment
+# Environment: keep real keys out, keep the example
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
 # Logs
 *.log
@@ -48,6 +47,7 @@ yarn-error.log*
 # Database
 *.db
 *.sqlite
+backend/data/
 
 # Testing
 .coverage

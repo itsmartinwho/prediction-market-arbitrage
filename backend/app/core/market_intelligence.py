@@ -1,7 +1,7 @@
 """Market intelligence - derives trading signals from real Polymarket activity."""
 from __future__ import annotations
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -32,8 +32,8 @@ class MarketIntelligence:
     """
     Derives trading signals from real Polymarket activity.
 
-    This replaces the mock news tracker with actionable signals
-    based on actual market data from the Polymarket APIs.
+    Every signal is computed from live Polymarket data; nothing is mocked.
+    They are heuristics for research, not recommendations.
 
     Signal types:
     - whale_trade: Large trades indicating informed positioning
@@ -99,7 +99,7 @@ class MarketIntelligence:
 
                 signals.append(
                     MarketSignal(
-                        id=f"whale-{trade.transaction_hash or datetime.utcnow().isoformat()}",
+                        id=f"whale-{trade.transaction_hash or datetime.now(timezone.utc).isoformat()}",
                         type="whale_trade",
                         title=f"${trade.usd_value:,.0f} {trade.side} {trade.outcome}",
                         summary=f"{trade.trader_display_name} {action_text} ${trade.usd_value:,.0f} of {trade.outcome} @ {trade.price:.2f}",
@@ -165,7 +165,7 @@ class MarketIntelligence:
                         confidence=0.4,  # Lower confidence for contrarian plays
                         current_price=market.yes_price,
                         reasoning=f"Strong market consensus at {price_pct:.0f}%. Research before trading against momentum.",
-                        detected_at=datetime.utcnow(),
+                        detected_at=datetime.now(timezone.utc),
                         source_data={
                             "yes_price": market.yes_price,
                             "volume": market.volume,
@@ -213,7 +213,7 @@ class MarketIntelligence:
                         confidence=0.5,
                         current_price=market.yes_price,
                         reasoning="High volume indicates strong market interest. Good liquidity for entry/exit.",
-                        detected_at=datetime.utcnow(),
+                        detected_at=datetime.now(timezone.utc),
                         source_data={
                             "volume": market.volume,
                             "liquidity": market.liquidity,
