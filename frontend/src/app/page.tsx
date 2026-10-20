@@ -1,169 +1,53 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { useOpportunitiesWebSocket } from "@/hooks/useWebSocket";
-import { fetchScannerStats, triggerScan } from "@/lib/api";
+import { useEffect, useState } from "react";
 import { StatsStrip } from "@/components/dashboard/StatsStrip";
 import { OpportunityFeed } from "@/components/dashboard/OpportunityFeed";
 import { MarketActivity } from "@/components/dashboard/MarketActivity";
 import { MarketExplorer } from "@/components/dashboard/MarketExplorer";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 import { SignalsFeed } from "@/components/dashboard/SignalsFeed";
-import { NeonText } from "@/components/shared/NeonText";
-import { GlowingBorder } from "@/components/shared/GlowingBorder";
 import { HelpDrawer } from "@/components/shared/HelpDrawer";
 
 type TabType = "markets" | "whales" | "signals" | "explorer" | "arbitrage";
+
+const tabs: { id: TabType; label: string }[] = [
+  { id: "markets", label: "Markets" },
+  { id: "whales", label: "Whale trades" },
+  { id: "signals", label: "Signals" },
+  { id: "explorer", label: "Search" },
+  { id: "arbitrage", label: "Arbitrage" },
+];
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("markets");
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
-  // Real-time opportunities via WebSocket
-  const { opportunities, isConnected, lastUpdate } = useOpportunitiesWebSocket();
+  // Each tab has a link: /#whales, /#arbitrage, ...
+  useEffect(() => {
+    const fromHash = () => {
+      const id = window.location.hash.slice(1) as TabType;
+      if (tabs.some((t) => t.id === id)) setActiveTab(id);
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
 
-  // Scanner stats via polling
-  const { data: stats } = useQuery({
-    queryKey: ["scanner-stats"],
-    queryFn: fetchScannerStats,
-    refetchInterval: 5000,
-  });
-
-  const handleManualScan = async () => {
-    try {
-      await triggerScan();
-    } catch (error) {
-      console.error("Failed to trigger scan:", error);
-    }
+  const selectTab = (id: TabType) => {
+    setActiveTab(id);
+    window.history.replaceState(null, "", id === "markets" ? window.location.pathname : `#${id}`);
   };
 
-  const tabs = [
-    { id: "markets" as const, label: "MARKETS", color: "cyan" },
-    { id: "whales" as const, label: "WHALE TRADES", color: "magenta" },
-    { id: "signals" as const, label: "SIGNALS", color: "orange" },
-    { id: "explorer" as const, label: "SEARCH", color: "yellow" },
-    { id: "arbitrage" as const, label: "ARBITRAGE", color: "green" },
-  ];
-
   return (
-    <div className="min-h-screen p-6">
-      {/* Header */}
-      <header className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <motion.h1
-              className="text-3xl font-bold mb-1"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              <NeonText color="cyan" size="2xl">
-                POLYMARKET DASHBOARD
-              </NeonText>
-            </motion.h1>
-            <p className="text-gray-500 text-sm">
-              Real-time Polymarket data and arbitrage detection. By{" "}
-              <a
-                href="https://github.com/itsmartinwho/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-neon-cyan hover:underline"
-              >
-                JJ Martin
-              </a>
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Compact Stats Strip */}
-            <StatsStrip
-              stats={stats || null}
-              opportunityCount={opportunities.length}
-              isConnected={isConnected}
-            />
-
-            <button
-              onClick={handleManualScan}
-              className="cyber-button"
-            >
-              SCAN
-            </button>
-            <GlowingBorder className="px-3 py-1.5">
-              <span className="text-gray-400 text-xs">v0.2.0</span>
-            </GlowingBorder>
-          </div>
-        </div>
-      </header>
-
-      {/* Tab Navigation */}
-      <div className="flex gap-2 mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all duration-300 ${
-              activeTab === tab.id
-                ? `bg-neon-${tab.color}/20 border-2 border-neon-${tab.color} text-neon-${tab.color} shadow-lg shadow-neon-${tab.color}/20`
-                : "bg-dark-surface border border-dark-border text-gray-400 hover:border-gray-500"
-            }`}
-            style={
-              activeTab === tab.id
-                ? {
-                    boxShadow: `0 0 20px ${
-                      tab.color === "cyan"
-                        ? "rgba(0, 255, 255, 0.3)"
-                        : tab.color === "magenta"
-                        ? "rgba(255, 0, 255, 0.3)"
-                        : tab.color === "green"
-                        ? "rgba(0, 255, 0, 0.3)"
-                        : tab.color === "orange"
-                        ? "rgba(255, 136, 0, 0.3)"
-                        : "rgba(255, 255, 0, 0.3)"
-                    }`,
-                  }
-                : {}
-            }
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Main Content - Full Width */}
-      <main>
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          {activeTab === "markets" && <MarketActivity />}
-          {activeTab === "whales" && <WhaleTracker />}
-          {activeTab === "signals" && <SignalsFeed />}
-          {activeTab === "explorer" && <MarketExplorer />}
-          {activeTab === "arbitrage" && (
-            <OpportunityFeed
-              opportunities={opportunities}
-              isConnected={isConnected}
-              lastUpdate={lastUpdate}
-            />
-          )}
-        </motion.div>
-      </main>
-
-      {/* Help Drawer */}
-      <HelpDrawer
-        isOpen={isHelpOpen}
-        onClose={() => setIsHelpOpen(!isHelpOpen)}
-        activeTab={activeTab}
-      />
-
-      {/* Footer */}
-      <footer className="mt-12 pt-6 border-t border-dark-border">
-        <div className="flex items-center justify-between text-gray-500 text-xs">
-          <div>
-            Built by{" "}
+    <div className="mx-auto min-h-screen max-w-6xl px-4 py-6 sm:px-6">
+      <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="lg:flex-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-100">
+            Polymarket arbitrage scanner
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Live, read-only Polymarket data. Research, not financial advice. By{" "}
             <a
               href="https://github.com/itsmartinwho/"
               target="_blank"
@@ -172,16 +56,51 @@ export default function Dashboard() {
             >
               JJ Martin
             </a>
-            {" "}| Real Polymarket Data
-          </div>
-          <div className="flex items-center gap-4">
-            <span>Polymarket Gamma API</span>
-            <span>|</span>
-            <span>WebSocket Real-time</span>
-            <span>|</span>
-            <span>Live Market Data</span>
-          </div>
+            .
+          </p>
         </div>
+        <StatsStrip />
+      </header>
+
+      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-dark-border" aria-label="Sections">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => selectTab(tab.id)}
+            aria-current={activeTab === tab.id ? "page" : undefined}
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm transition-colors ${
+              activeTab === tab.id
+                ? "border-neon-cyan text-gray-100"
+                : "border-transparent text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      <main>
+        {activeTab === "markets" && <MarketActivity />}
+        {activeTab === "whales" && <WhaleTracker />}
+        {activeTab === "signals" && <SignalsFeed />}
+        {activeTab === "explorer" && <MarketExplorer />}
+        {activeTab === "arbitrage" && <OpportunityFeed />}
+      </main>
+
+      <HelpDrawer isOpen={isHelpOpen} onToggle={() => setIsHelpOpen(!isHelpOpen)} activeTab={activeTab} />
+
+      <footer className="mt-12 flex flex-col gap-2 border-t border-dark-border pt-6 text-xs text-gray-500 sm:flex-row sm:justify-between">
+        <span>
+          Data: Polymarket&apos;s Gamma, CLOB and Data APIs, and Google News. Nothing here can place a trade.
+        </span>
+        <a
+          href="https://github.com/itsmartinwho/prediction-market-arbitrage"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-gray-400 hover:text-gray-200"
+        >
+          Source on GitHub
+        </a>
       </footer>
     </div>
   );

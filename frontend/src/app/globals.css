@@ -3,18 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --neon-cyan: #00ffff;
-  --neon-magenta: #ff00ff;
-  --neon-yellow: #ffff00;
-  --neon-green: #00ff00;
-  --neon-red: #ff0044;
-  --void-black: #0a0a0f;
-  --dark-gray: #1a1a2e;
-  --grid-color: rgba(0, 255, 255, 0.05);
-}
-
-* {
-  box-sizing: border-box;
+  color-scheme: dark;
 }
 
 html,
@@ -25,178 +14,40 @@ body {
 }
 
 body {
-  background-color: var(--void-black);
-  color: white;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-
-  /* Cyberpunk grid background */
-  background-image: linear-gradient(var(--grid-color) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
-  background-size: 50px 50px;
-  background-position: -1px -1px;
+  @apply bg-void-black font-sans text-gray-200 antialiased;
 }
 
-/* Neon glow effects */
-.neon-glow {
-  box-shadow: 0 0 5px var(--neon-cyan), 0 0 10px var(--neon-cyan),
-    0 0 20px var(--neon-cyan);
-}
-
-.neon-glow-magenta {
-  box-shadow: 0 0 5px var(--neon-magenta), 0 0 10px var(--neon-magenta),
-    0 0 20px var(--neon-magenta);
-}
-
-.neon-glow-green {
-  box-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green),
-    0 0 20px var(--neon-green);
-}
-
-.neon-glow-red {
-  box-shadow: 0 0 5px var(--neon-red), 0 0 10px var(--neon-red),
-    0 0 20px var(--neon-red);
-}
-
-.neon-text {
-  text-shadow: 0 0 5px currentColor, 0 0 10px currentColor;
-}
-
-.neon-text-cyan {
-  color: var(--neon-cyan);
-  text-shadow: 0 0 5px var(--neon-cyan), 0 0 10px var(--neon-cyan);
-}
-
-.neon-text-magenta {
-  color: var(--neon-magenta);
-  text-shadow: 0 0 5px var(--neon-magenta), 0 0 10px var(--neon-magenta);
-}
-
-.neon-text-green {
-  color: var(--neon-green);
-  text-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green);
-}
-
-/* Glowing border */
-.glow-border {
-  border: 1px solid rgba(0, 255, 255, 0.3);
-  position: relative;
-}
-
-.glow-border::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border: 1px solid var(--neon-cyan);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.glow-border:hover::before {
-  opacity: 1;
-  box-shadow: 0 0 10px var(--neon-cyan);
-}
-
-/* Card styles */
-.cyber-card {
-  background: linear-gradient(
-    135deg,
-    rgba(26, 26, 46, 0.9) 0%,
-    rgba(10, 10, 15, 0.95) 100%
-  );
-  border: 1px solid rgba(0, 255, 255, 0.2);
-  border-radius: 4px;
-  backdrop-filter: blur(10px);
-}
-
-.cyber-card:hover {
-  border-color: rgba(0, 255, 255, 0.4);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
-}
-
-/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--void-black);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--dark-gray);
-  border-radius: 4px;
+  @apply rounded bg-dark-lighter;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 255, 255, 0.3);
-}
-
-/* Pulsing dot for live indicators */
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.2);
-  }
-}
-
-.pulse-dot {
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-/* Scanline effect overlay */
-.scanline-overlay::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    transparent 50%,
-    rgba(0, 0, 0, 0.03) 50%
-  );
-  background-size: 100% 4px;
-  pointer-events: none;
-  z-index: 9999;
-}
-
-/* Profit/Loss colors */
-.profit {
-  color: var(--neon-green);
-}
-
-.loss {
-  color: var(--neon-red);
-}
-
-/* Button styles */
+/* The one button style */
 .cyber-button {
-  background: linear-gradient(
-    135deg,
-    rgba(0, 255, 255, 0.1) 0%,
-    rgba(0, 255, 255, 0.05) 100%
-  );
-  border: 1px solid rgba(0, 255, 255, 0.3);
-  color: var(--neon-cyan);
-  padding: 8px 16px;
-  border-radius: 2px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  @apply rounded border border-dark-border bg-dark-surface px-3 py-1.5 text-gray-200 transition-colors;
 }
 
-.cyber-button:hover {
-  background: rgba(0, 255, 255, 0.2);
-  border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+.cyber-button:hover:not(:disabled) {
+  @apply border-gray-500 text-white;
 }
 
-.cyber-button:active {
-  transform: scale(0.98);
+.cyber-button:focus-visible,
+a:focus-visible,
+button:focus-visible {
+  @apply outline-none ring-2 ring-neon-cyan/60;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

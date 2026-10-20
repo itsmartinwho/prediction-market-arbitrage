@@ -1,121 +1,85 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// The dashboard calls the API on its own origin: on Vercel, /api/* is routed
+// to the Python service; in `next dev`, next.config.js proxies /api/* to the
+// local backend. Set NEXT_PUBLIC_API_URL only to call an API elsewhere.
+import type { MarketListResponse } from "@/types/market";
+import type { MarketSignal } from "@/types/news";
+import type { OpportunitiesResponse, ApiStatus } from "@/types/opportunity";
+import type { WhaleActivity } from "@/types/whale";
 
-export async function fetchOpportunities() {
-  const response = await fetch(`${API_URL}/api/arbitrage/opportunities`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch opportunities");
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+const TIMEOUT_MS = 20_000;
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number | null,
+  ) {
+    super(message);
+    this.name = "ApiError";
   }
-  return response.json();
 }
 
-export async function fetchScannerStats() {
-  const response = await fetch(`${API_URL}/api/arbitrage/stats`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch scanner stats");
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: { Accept: "application/json", ...(init?.headers || {}) },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if ((err as Error)?.name === "AbortError") {
+      throw new ApiError(`No answer after ${TIMEOUT_MS / 1000} seconds.`, null);
+    }
+    throw new ApiError("Can't reach the API.", null);
+  } finally {
+    clearTimeout(timer);
   }
-  return response.json();
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.json();
+      detail = typeof body?.detail === "string" ? body.detail : "";
+    } catch {
+      // not JSON: keep the status alone
+    }
+    throw new ApiError(detail || `The API answered ${response.status}.`, response.status);
+  }
+  return response.json() as Promise<T>;
 }
 
-export async function triggerScan() {
-  const response = await fetch(`${API_URL}/api/arbitrage/scan`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to trigger scan");
-  }
-  return response.json();
+export function describeError(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return "Something went wrong.";
 }
 
-export async function fetchMarkets(limit = 50, offset = 0) {
-  const response = await fetch(
-    `${API_URL}/api/markets?limit=${limit}&offset=${offset}`
+export const fetchStatus = () => request<ApiStatus>("/api/status");
+
+export const fetchOpportunities = () =>
+  request<OpportunitiesResponse>("/api/arbitrage/opportunities");
+
+export const fetchWhaleActivity = (limit = 30) =>
+  request<WhaleActivity[]>(`/api/whales/activity?limit=${limit}`);
+
+export const fetchSignals = (limit = 20) =>
+  request<MarketSignal[]>(`/api/news?limit=${limit}`);
+
+export const fetchHotMarkets = (limit = 20) =>
+  request<MarketListResponse>(`/api/market-activity/hot?limit=${limit}`);
+
+export const fetchPriceMovers = (limit = 20) =>
+  request<MarketListResponse>(`/api/market-activity/movers?limit=${limit}`);
+
+export const fetchClosingSoon = (days = 7, limit = 20) =>
+  request<MarketListResponse>(
+    `/api/market-activity/closing-soon?days=${days}&limit=${limit}`,
   );
-  if (!response.ok) {
-    throw new Error("Failed to fetch markets");
-  }
-  return response.json();
-}
 
-export async function fetchMarketOrderbook(marketId: string) {
-  const response = await fetch(`${API_URL}/api/markets/${marketId}/orderbook`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch orderbook");
-  }
-  return response.json();
-}
-
-// Whale tracker endpoints
-export async function fetchWhales(limit = 20) {
-  const response = await fetch(`${API_URL}/api/whales?limit=${limit}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch whales");
-  }
-  return response.json();
-}
-
-export async function fetchWhaleActivity(limit = 20) {
-  const response = await fetch(`${API_URL}/api/whales/activity?limit=${limit}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch whale activity");
-  }
-  return response.json();
-}
-
-// Signals endpoints (served under /api/news)
-export async function fetchNews(limit = 20) {
-  const response = await fetch(`${API_URL}/api/news?limit=${limit}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch news");
-  }
-  return response.json();
-}
-
-export async function fetchNewsSignals() {
-  const response = await fetch(`${API_URL}/api/news/signals`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch news signals");
-  }
-  return response.json();
-}
-
-// Market Activity endpoints (real Polymarket data)
-export async function fetchHotMarkets(limit = 20) {
-  const response = await fetch(`${API_URL}/api/market-activity/hot?limit=${limit}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch hot markets");
-  }
-  return response.json();
-}
-
-export async function fetchPriceMovers(limit = 20) {
-  const response = await fetch(`${API_URL}/api/market-activity/movers?limit=${limit}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch price movers");
-  }
-  return response.json();
-}
-
-export async function fetchClosingSoon(days = 7, limit = 20) {
-  const response = await fetch(`${API_URL}/api/market-activity/closing-soon?days=${days}&limit=${limit}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch closing soon markets");
-  }
-  return response.json();
-}
-
-export async function searchMarkets(query: string, limit = 20) {
-  const response = await fetch(`${API_URL}/api/market-activity/search?q=${encodeURIComponent(query)}&limit=${limit}`);
-  if (!response.ok) {
-    throw new Error("Failed to search markets");
-  }
-  return response.json();
-}
-
-// Arbitrage diagnostics
-export async function fetchArbitrageDiagnostics() {
-  const response = await fetch(`${API_URL}/api/arbitrage/diagnostics`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch arbitrage diagnostics");
-  }
-  return response.json();
-}
+export const searchMarkets = (query: string, limit = 20) =>
+  request<MarketListResponse>(
+    `/api/market-activity/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+  );
