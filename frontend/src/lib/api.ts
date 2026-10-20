@@ -61,7 +61,7 @@ export async function fetchWhaleActivity(limit = 20) {
   return response.json();
 }
 
-// News front-runner endpoints
+// Signals endpoints (served under /api/news)
 export async function fetchNews(limit = 20) {
   const response = await fetch(`${API_URL}/api/news?limit=${limit}`);
   if (!response.ok) {

@@ -32,8 +32,8 @@ class MarketIntelligence:
     """
     Derives trading signals from real Polymarket activity.
 
-    This replaces the mock news tracker with actionable signals
-    based on actual market data from the Polymarket APIs.
+    Every signal is computed from live Polymarket data; nothing is mocked.
+    They are heuristics for research, not recommendations.
 
     Signal types:
     - whale_trade: Large trades indicating informed positioning
