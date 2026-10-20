@@ -68,7 +68,7 @@ export default function Dashboard() {
             key={tab.id}
             onClick={() => selectTab(tab.id)}
             aria-current={activeTab === tab.id ? "page" : undefined}
-            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm transition-colors ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm ${
               activeTab === tab.id
                 ? "border-neon-cyan text-gray-100"
                 : "border-transparent text-gray-400 hover:text-gray-200"
