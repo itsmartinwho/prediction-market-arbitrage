@@ -1,47 +1,38 @@
 from __future__ import annotations
-"""Background scanner service for arbitrage opportunities."""
+"""The continuous scanner: local mode only.
+
+Scans every few seconds through the same ScanService the request-driven
+endpoints use, and alerts once per opportunity (a new combined cost is a new
+opportunity). Vercel Functions keep no background work, so on Vercel this
+loop does not start and nothing alerts; see README.
+"""
 import asyncio
 import logging
-from datetime import datetime, timedelta
-from typing import Callable, Awaitable
+from datetime import datetime
+from typing import Awaitable, Callable, Optional
 
 from app.config import get_settings
-from app.core.arbitrage import YesNoArbitrageDetector
+from app.core.scan import ScanService, get_scan_service
 from app.models.opportunity import Opportunity
-from app.clients.polymarket import GammaClient
 
 logger = logging.getLogger(__name__)
 
 
 class OpportunityScanner:
-    """
-    Background service that continuously scans for arbitrage opportunities.
-
-    Features:
-    - Periodic scanning (configurable interval)
-    - Deduplication (don't alert same opportunity twice)
-    - Callback-based notifications
-    - Graceful shutdown
-    """
-
     def __init__(
         self,
-        detector: YesNoArbitrageDetector | None = None,
-        on_opportunity: Callable[[Opportunity], Awaitable[None]] | None = None,
-        scan_interval: int | None = None,
+        service: Optional[ScanService] = None,
+        on_opportunity: Optional[Callable[[Opportunity], Awaitable[None]]] = None,
+        scan_interval: Optional[int] = None,
     ):
-        self.detector = detector or YesNoArbitrageDetector()
+        self.service = service or get_scan_service()
         self.on_opportunity = on_opportunity
-
-        settings = get_settings()
-        self.scan_interval = scan_interval or settings.scan_interval_seconds
-
-        # State
+        self.scan_interval = scan_interval or get_settings().scan_interval_seconds
         self.running = False
-        self.opportunities: dict[str, Opportunity] = {}
-        self._seen_opportunities: set[str] = set()
-        self._last_scan: datetime | None = None
+        self._seen: set = set()
         self._scan_count = 0
+        self._last_scan: Optional[datetime] = None
+        self._active = 0
 
     @property
     def is_running(self) -> bool:
@@ -49,119 +40,57 @@ class OpportunityScanner:
 
     @property
     def stats(self) -> dict:
-        """Get scanner statistics."""
         return {
             "running": self.running,
             "scan_count": self._scan_count,
             "last_scan": self._last_scan.isoformat() if self._last_scan else None,
-            "active_opportunities": len(self.opportunities),
-            "total_seen": len(self._seen_opportunities),
+            "active_opportunities": self._active,
+            "total_seen": len(self._seen),
         }
 
     async def start(self):
-        """Start the scanner loop."""
-        logger.info(
-            f"Starting opportunity scanner (interval: {self.scan_interval}s)"
-        )
+        logger.info(f"Continuous scanner started (pause between scans: {self.scan_interval}s)")
         self.running = True
-
         while self.running:
             try:
-                await self._scan_cycle()
+                await self.scan_once()
             except Exception as e:
-                logger.error(f"Scanner error: {e}", exc_info=True)
-
+                logger.error(f"Scan failed: {e}", exc_info=True)
             await asyncio.sleep(self.scan_interval)
 
     async def stop(self):
-        """Stop the scanner gracefully."""
-        logger.info("Stopping opportunity scanner...")
         self.running = False
-        await self.detector.close()
 
-    async def _scan_cycle(self):
-        """Run one scan cycle."""
-        start_time = datetime.utcnow()
+    async def scan_once(self) -> list:
+        result = await self.service.fresh()
         self._scan_count += 1
-
-        logger.debug(f"Starting scan cycle #{self._scan_count}")
-
-        # Get opportunities
-        new_opps = await self.detector.scan_all_markets()
-
-        # Process opportunities
-        current_ids = set()
-        for opp in new_opps:
-            current_ids.add(opp.id)
-
-            # Check if this is new
-            if opp.id not in self._seen_opportunities:
-                self._seen_opportunities.add(opp.id)
-                self.opportunities[opp.id] = opp
-
-                logger.info(f"New opportunity: {opp.market_question[:50]}...")
-
-                # Trigger callback
-                if self.on_opportunity:
-                    try:
-                        await self.on_opportunity(opp)
-                    except Exception as e:
-                        logger.error(f"Callback error: {e}")
-            else:
-                # Update existing opportunity
-                self.opportunities[opp.id] = opp
-
-        # Remove stale opportunities (not seen in last scan)
-        stale_ids = set(self.opportunities.keys()) - current_ids
-        for stale_id in stale_ids:
-            del self.opportunities[stale_id]
-            logger.debug(f"Removed stale opportunity: {stale_id}")
-
-        self._last_scan = datetime.utcnow()
-        duration = (self._last_scan - start_time).total_seconds()
-
+        self._last_scan = result.finished_at
+        self._active = len(result.opportunities)
+        for opp in result.opportunities:
+            if opp.id in self._seen:
+                continue
+            self._seen.add(opp.id)
+            logger.info(f"New opportunity: {opp.market_question[:50]}")
+            if self.on_opportunity:
+                try:
+                    await self.on_opportunity(opp)
+                except Exception as e:
+                    logger.error(f"Alert failed: {e}")
         logger.info(
-            f"Scan #{self._scan_count} complete: "
-            f"{len(new_opps)} opportunities found, "
-            f"{len(stale_ids)} removed, "
-            f"{duration:.2f}s"
+            f"Scan #{self._scan_count}: {result.markets_scanned} markets, "
+            f"{len(result.opportunities)} opportunities, {result.duration_ms / 1000:.1f}s"
         )
-
-    def get_opportunities(self) -> list[Opportunity]:
-        """Get current opportunities sorted by edge."""
-        return sorted(
-            self.opportunities.values(),
-            key=lambda x: x.edge_percent,
-            reverse=True,
-        )
-
-    def get_opportunity(self, opp_id: str) -> Opportunity | None:
-        """Get a specific opportunity by ID."""
-        return self.opportunities.get(opp_id)
-
-    async def scan_once(self) -> list[Opportunity]:
-        """Run a single scan and return opportunities."""
-        await self._scan_cycle()
-        return self.get_opportunities()
+        return result.opportunities
 
 
-class FastScanner:
-    """
-    Faster scanner using Gamma API prices only.
+_scanner: Optional[OpportunityScanner] = None
 
-    Less accurate than full CLOB scanning, but much faster.
-    Good for quick checks and initial filtering.
-    """
 
-    def __init__(self):
-        self.gamma = GammaClient()
-        self.detector = YesNoArbitrageDetector()
+def get_scanner() -> Optional[OpportunityScanner]:
+    """The running continuous scanner, or None in on_request mode."""
+    return _scanner
 
-    async def scan(self) -> list[Opportunity]:
-        """Quick scan using Gamma API prices."""
-        markets = await self.gamma.get_all_active_markets()
-        return await self.detector.scan_markets_fast(markets)
 
-    async def close(self):
-        await self.gamma.close()
-        await self.detector.close()
+def set_scanner(scanner: Optional[OpportunityScanner]) -> None:
+    global _scanner
+    _scanner = scanner

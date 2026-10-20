@@ -1,6 +1,6 @@
 from __future__ import annotations
 """Market data models."""
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 
@@ -25,7 +25,7 @@ class OrderBook(BaseModel):
     token_id: str
     bids: list[OrderBookLevel] = Field(default_factory=list)
     asks: list[OrderBookLevel] = Field(default_factory=list)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def best_bid(self) -> float | None:

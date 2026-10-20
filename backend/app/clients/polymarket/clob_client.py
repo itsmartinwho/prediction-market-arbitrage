@@ -1,169 +1,109 @@
-from __future__ import annotations
 """Polymarket CLOB API client: public, read-only order book data."""
+from __future__ import annotations
+
+import asyncio
 import logging
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Set
+
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import get_settings
 from app.models.market import OrderBook, OrderBookLevel
 
+from .http import get_json, new_client, post_json
+
 logger = logging.getLogger(__name__)
+
+BOOKS_CHUNK = 100  # token ids per /books request
+BOOKS_CONCURRENCY = 4  # /books requests in flight at once
+
+
+def parse_book(data: dict, token_id: Optional[str] = None) -> OrderBook:
+    """An order book with bids highest first and asks lowest first."""
+
+    def levels(rows: Any) -> List[OrderBookLevel]:
+        out = []
+        for row in rows or []:
+            try:
+                out.append(OrderBookLevel(price=float(row["price"]), size=float(row["size"])))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
+
+    bids = sorted(levels(data.get("bids")), key=lambda x: x.price, reverse=True)
+    asks = sorted(levels(data.get("asks")), key=lambda x: x.price)
+    return OrderBook(token_id=str(token_id or data.get("asset_id", "")), bids=bids, asks=asks)
+
+
+@dataclass
+class BookBatch:
+    """Order books by token id, and the ids whose request failed."""
+
+    books: Dict[str, OrderBook] = field(default_factory=dict)
+    failed: Set[str] = field(default_factory=set)
 
 
 class CLOBClient:
     """
-    Client for Polymarket CLOB (Central Limit Order Book) API.
+    Client for Polymarket's CLOB (central limit order book) API.
 
-    Only the public GET endpoints are used (order books, prices). There is no
-    authentication, signing or order placement anywhere in this app.
+    Only public market-data endpoints are used. There is no authentication,
+    signing or order placement anywhere in this app.
 
-    API Docs: https://docs.polymarket.com/developers/CLOB
+    API docs: https://docs.polymarket.com/developers/CLOB
     """
 
-    def __init__(self, base_url: str | None = None):
-        settings = get_settings()
-        self.base_url = base_url or settings.clob_api_url
-        self._client: httpx.AsyncClient | None = None
+    def __init__(self, base_url: Optional[str] = None, http: Optional[httpx.AsyncClient] = None):
+        self.base_url = (base_url or get_settings().clob_api_url).rstrip("/")
+        self._http = http
+        self._owns_http = http is None
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=30.0,
-                headers={"Accept": "application/json"},
-            )
-        return self._client
+    @property
+    def http(self) -> httpx.AsyncClient:
+        if self._http is None or self._http.is_closed:
+            self._http = new_client()
+            self._owns_http = True
+        return self._http
 
     async def close(self):
-        """Close the HTTP client."""
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
-    )
-    async def _get(self, endpoint: str, params: dict | None = None) -> Any:
-        """Make GET request with retry logic."""
-        client = await self._get_client()
-        response = await client.get(endpoint, params=params)
-        response.raise_for_status()
-        return response.json()
+        if self._owns_http and self._http is not None and not self._http.is_closed:
+            await self._http.aclose()
 
     async def get_order_book(self, token_id: str) -> OrderBook:
+        """The order book for one token (GET /book)."""
+        data = await get_json(self.http, f"{self.base_url}/book", {"token_id": token_id})
+        return parse_book(data, token_id)
+
+    async def get_best_ask(self, token_id: str) -> Optional[float]:
+        """The lowest ask for one token: what buying it costs right now."""
+        return (await self.get_order_book(token_id)).best_ask
+
+    async def get_best_bid(self, token_id: str) -> Optional[float]:
+        return (await self.get_order_book(token_id)).best_bid
+
+    async def get_order_books(self, token_ids: List[str]) -> BookBatch:
+        """Order books for many tokens, 100 per /books request, a few requests at once.
+
+        A failed request does not fail the batch: its ids land in `failed`.
         """
-        Get the order book for a token.
+        batch = BookBatch()
+        unique = list(dict.fromkeys(t for t in token_ids if t))
+        chunks = [unique[i:i + BOOKS_CHUNK] for i in range(0, len(unique), BOOKS_CHUNK)]
+        gate = asyncio.Semaphore(BOOKS_CONCURRENCY)
 
-        Args:
-            token_id: The CLOB token ID (YES or NO token)
+        async def fetch(chunk: List[str]) -> None:
+            async with gate:
+                try:
+                    rows = await post_json(self.http, f"{self.base_url}/books", [{"token_id": t} for t in chunk])
+                except Exception as e:
+                    logger.warning(f"/books failed for {len(chunk)} tokens: {e}")
+                    batch.failed.update(chunk)
+                    return
+            for row in rows if isinstance(rows, list) else []:
+                book = parse_book(row)
+                if book.token_id:
+                    batch.books[book.token_id] = book
 
-        Returns:
-            OrderBook with bids and asks
-        """
-        data = await self._get("/book", params={"token_id": token_id})
-
-        bids = [
-            OrderBookLevel(price=float(level["price"]), size=float(level["size"]))
-            for level in data.get("bids", [])
-        ]
-        asks = [
-            OrderBookLevel(price=float(level["price"]), size=float(level["size"]))
-            for level in data.get("asks", [])
-        ]
-
-        # Sort: bids descending (highest first), asks ascending (lowest first)
-        bids.sort(key=lambda x: x.price, reverse=True)
-        asks.sort(key=lambda x: x.price)
-
-        return OrderBook(token_id=token_id, bids=bids, asks=asks)
-
-    async def get_midpoint(self, token_id: str) -> float | None:
-        """
-        Get the midpoint price for a token.
-
-        Args:
-            token_id: The CLOB token ID
-
-        Returns:
-            Midpoint price or None if no liquidity
-        """
-        try:
-            data = await self._get("/midpoint", params={"token_id": token_id})
-            return float(data.get("mid", 0))
-        except Exception:
-            return None
-
-    async def get_price(self, token_id: str, side: str = "buy") -> float | None:
-        """
-        Get the best price for a token.
-
-        Args:
-            token_id: The CLOB token ID
-            side: "buy" (best ask) or "sell" (best bid)
-
-        Returns:
-            Best price or None if no liquidity
-        """
-        try:
-            data = await self._get(
-                "/price", params={"token_id": token_id, "side": side}
-            )
-            return float(data.get("price", 0))
-        except Exception:
-            return None
-
-    async def get_spread(self, token_id: str) -> dict | None:
-        """
-        Get the bid-ask spread for a token.
-
-        Returns:
-            Dict with bid, ask, and spread
-        """
-        try:
-            data = await self._get("/spread", params={"token_id": token_id})
-            return {
-                "bid": float(data.get("bid", 0)),
-                "ask": float(data.get("ask", 0)),
-                "spread": float(data.get("spread", 0)),
-            }
-        except Exception:
-            return None
-
-    async def get_best_ask(self, token_id: str) -> float | None:
-        """
-        Get the best (lowest) ask price - what you'd pay to buy.
-
-        This is the key price for arbitrage detection.
-        """
-        book = await self.get_order_book(token_id)
-        return book.best_ask
-
-    async def get_best_bid(self, token_id: str) -> float | None:
-        """
-        Get the best (highest) bid price - what you'd receive to sell.
-        """
-        book = await self.get_order_book(token_id)
-        return book.best_bid
-
-    async def get_order_books_batch(
-        self, token_ids: list[str]
-    ) -> dict[str, OrderBook]:
-        """
-        Get order books for multiple tokens.
-
-        Note: Makes parallel requests, be mindful of rate limits.
-        """
-        import asyncio
-
-        async def fetch_book(token_id: str) -> tuple[str, OrderBook | None]:
-            try:
-                book = await self.get_order_book(token_id)
-                return token_id, book
-            except Exception as e:
-                logger.warning(f"Failed to fetch order book for {token_id}: {e}")
-                return token_id, None
-
-        results = await asyncio.gather(*[fetch_book(tid) for tid in token_ids])
-        return {tid: book for tid, book in results if book is not None}
+        await asyncio.gather(*(fetch(c) for c in chunks))
+        return batch

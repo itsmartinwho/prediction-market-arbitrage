@@ -1,172 +1,111 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
 import { GlowingBorder } from "../shared/GlowingBorder";
 import { NeonText } from "../shared/NeonText";
-import { PulsingDot } from "../shared/PulsingDot";
+import { EmptyState, ErrorState, LoadingState, StaleNotice } from "../shared/QueryState";
 import { OpportunityCard } from "./OpportunityCard";
-import { Opportunity } from "@/types/opportunity";
-import { fetchArbitrageDiagnostics } from "@/lib/api";
-import { ScanDiagnostics } from "@/types/market";
+import { useOpportunities, useStatus } from "@/hooks/useDashboard";
+import { useNow } from "@/hooks/useNow";
+import { timeAgo } from "@/lib/format";
+import { OpportunitiesResponse } from "@/types/opportunity";
 
-interface OpportunityFeedProps {
-  opportunities: Opportunity[];
-  isConnected: boolean;
-  lastUpdate: string | null;
-}
-
-function DiagnosticsPanel({ diagnostics }: { diagnostics: ScanDiagnostics }) {
-  const total = diagnostics.total_markets;
-  const analyzed = total - diagnostics.filtered_not_binary - diagnostics.filtered_no_tokens;
-
+function Row({ label, value, tone = "text-gray-300" }: { label: string; value: number | string; tone?: string }) {
   return (
-    <div className="bg-dark-surface rounded-lg p-4 mb-4 border border-dark-border">
-      <div className="text-xs text-gray-400 mb-3 font-semibold">
-        SCAN DIAGNOSTICS
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 text-xs">
-        {/* Left Column */}
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Markets Fetched:</span>
-            <span className="text-neon-cyan font-mono">{total}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Binary Markets:</span>
-            <span className="text-neon-cyan font-mono">{analyzed}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">With Prices:</span>
-            <span className="text-neon-cyan font-mono">
-              {analyzed - diagnostics.filtered_no_clob_liquidity}
-            </span>
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Not Profitable:</span>
-            <span className="text-gray-400 font-mono">
-              {diagnostics.filtered_not_profitable}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Below {diagnostics.threshold_percent}% Threshold:</span>
-            <span className="text-gray-400 font-mono">
-              {diagnostics.filtered_below_threshold}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Gamma Fallback Used:</span>
-            <span className="text-neon-yellow font-mono">
-              {diagnostics.used_gamma_fallback}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Summary */}
-      <div className="mt-3 pt-3 border-t border-dark-border">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-400">
-            Result: {analyzed} markets analyzed, {diagnostics.opportunities_found} opportunities found
-          </span>
-          {diagnostics.filtered_not_profitable > 0 && (
-            <span className="text-xs text-gray-500">
-              (Most markets are efficiently priced)
-            </span>
-          )}
-        </div>
-      </div>
+    <div className="flex justify-between gap-4">
+      <span className="text-gray-500">{label}</span>
+      <span className={`font-mono ${tone}`}>{value}</span>
     </div>
   );
 }
 
-export function OpportunityFeed({
-  opportunities,
-  isConnected,
-  lastUpdate,
-}: OpportunityFeedProps) {
-  const { data: diagnostics } = useQuery<ScanDiagnostics>({
-    queryKey: ["arbitrage-diagnostics"],
-    queryFn: fetchArbitrageDiagnostics,
-    refetchInterval: 10000, // Every 10 seconds
-  });
+function Diagnostics({ scan }: { scan: OpportunitiesResponse }) {
+  const d = scan.diagnostics;
+  const priced = d.total_markets - d.filtered_no_clob_liquidity;
+  return (
+    <div className="mb-4 rounded-lg border border-dark-border bg-dark-surface p-4 text-xs">
+      <div className="mb-3 font-medium text-gray-400">What the last scan saw</div>
+      <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+        <Row label="Markets scanned" value={d.total_markets} />
+        <Row label="With prices" value={priced} />
+        <Row label="Priced from order books" value={priced - d.used_gamma_fallback} />
+        <Row label="Gamma price fallback" value={d.used_gamma_fallback} tone="text-neon-yellow" />
+        <Row label="YES + NO at or above $1 after fee" value={d.filtered_not_profitable} />
+        <Row label={`Under the ${d.threshold_percent}% threshold`} value={d.filtered_below_threshold} />
+        {d.clob_errors > 0 && <Row label="Order book errors" value={d.clob_errors} tone="text-neon-red" />}
+        <Row label="Scan took" value={`${(scan.scan_time_ms / 1000).toFixed(1)}s`} />
+      </div>
+      <p className="mt-3 border-t border-dark-border pt-3 text-gray-500">
+        A fallback uses the price Gamma lists (last or mid), which you cannot necessarily buy at. It happens when one
+        side of a book has no asks.
+      </p>
+    </div>
+  );
+}
+
+export function OpportunityFeed() {
+  const scan = useOpportunities();
+  const status = useStatus();
+  const now = useNow(1_000);
+  const data = scan.data;
+
+  const howOften =
+    status.data?.mode === "continuous"
+      ? `every ${status.data.scan_interval_seconds}s after the last scan ends`
+      : `on request, at most once every ${status.data?.cache_ttl_seconds ?? 30}s`;
 
   return (
-    <GlowingBorder className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <NeonText color="cyan" size="lg">
-            ARBITRAGE SCANNER
-          </NeonText>
-          {isConnected && <PulsingDot color="green" size="sm" />}
-        </div>
-        <div className="text-gray-500 text-sm">
-          {opportunities.length} active
-          {lastUpdate && (
-            <span className="ml-2">
-              | Updated {new Date(lastUpdate).toLocaleTimeString()}
-            </span>
-          )}
-        </div>
+    <GlowingBorder color="green" className="p-4 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <NeonText color="green" size="lg">
+          Arbitrage
+        </NeonText>
+        {data && (
+          <span className="text-xs text-gray-500">
+            {data.count} found in the {data.markets_scanned} most liquid two-outcome markets, scanned{" "}
+            {timeAgo(data.scanned_at, now)}
+          </span>
+        )}
       </div>
 
-      {/* Diagnostics Panel - always show when no opportunities */}
-      {opportunities.length === 0 && diagnostics && (
-        <DiagnosticsPanel diagnostics={diagnostics} />
-      )}
-
-      {/* Opportunities List */}
-      {opportunities.length === 0 ? (
-        <div className="text-center py-8">
-          <motion.div
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
-            <NeonText color="cyan" size="lg">
-              SCANNING FOR OPPORTUNITIES...
-            </NeonText>
-          </motion.div>
-          <p className="text-gray-500 mt-3 text-sm max-w-md mx-auto">
-            No arbitrage opportunities at current prices.
-            Markets on Polymarket are typically efficiently priced,
-            so opportunities are rare (but they do occur!).
-          </p>
-          <p className="text-gray-600 mt-2 text-xs">
-            Scanner checks all {diagnostics?.total_markets || "active"} markets every 5 seconds
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <AnimatePresence>
-            {opportunities.map((opp, index) => (
-              <OpportunityCard
-                key={opp.id}
-                opportunity={opp}
-                index={index}
+      {scan.isPending ? (
+        <LoadingState what="order books for the arbitrage scan" />
+      ) : scan.isError && !data ? (
+        <ErrorState what="the arbitrage scan" error={scan.error} onRetry={() => scan.refetch()} />
+      ) : data ? (
+        <>
+          {scan.isError && <StaleNotice error={scan.error} />}
+          {data.count === 0 ? (
+            <>
+              <EmptyState
+                title="No YES + NO pair under $1 after the fee right now."
+                hint="That is the usual result: Polymarket's liquid markets are priced tightly, and an edge, when one appears, tends to close within seconds."
               />
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
+              <Diagnostics scan={data} />
+            </>
+          ) : (
+            <>
+              <div className="space-y-4">
+                {data.opportunities.map((opp) => (
+                  <OpportunityCard key={opp.id} opportunity={opp} />
+                ))}
+              </div>
+              <div className="mt-4">
+                <Diagnostics scan={data} />
+              </div>
+            </>
+          )}
+        </>
+      ) : null}
 
-      {/* Footer Info */}
-      <div className="mt-6 pt-4 border-t border-dark-border">
-        <div className="text-gray-500 text-xs">
-          <p>
-            <span className="text-neon-cyan">HOW IT WORKS:</span> Buy YES + NO for combined cost.
-            One always wins, paying $1.00. Profit = $1.00 - cost - 2% fee.
-          </p>
-          <p className="mt-1">
-            <span className="text-neon-yellow">THRESHOLD:</span> Only showing opportunities
-            with &gt;{diagnostics?.threshold_percent || 1}% edge after fees.
-          </p>
-        </div>
+      <div className="mt-4 space-y-1 border-t border-dark-border pt-3 text-xs text-gray-500">
+        <p>
+          In a two-outcome market one side pays $1.00. If the best YES ask plus the best NO ask costs less than $1.00
+          minus the assumed ${(data?.fee ?? 0.02).toFixed(2)} fee, buying both locks in the difference.
+        </p>
+        <p>
+          It scans the {status.data?.market_limit ?? 200} most liquid markets {howOften}, and lists edges of{" "}
+          {data?.diagnostics.threshold_percent ?? 1}% or more. Slippage and depth are not modelled.
+        </p>
       </div>
     </GlowingBorder>
   );

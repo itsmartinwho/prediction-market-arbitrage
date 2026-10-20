@@ -1,0 +1,8 @@
+# Local-only files the CLI should not upload (Git deploys never see them anyway)
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.env
+**/.env.*

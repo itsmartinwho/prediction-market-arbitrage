@@ -1,306 +1,140 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
-import { GlowingBorder } from "./GlowingBorder";
-import { NeonText } from "./NeonText";
+import { useEffect } from "react";
+import { useStatus } from "@/hooks/useDashboard";
 
 type TabType = "markets" | "whales" | "signals" | "explorer" | "arbitrage";
 
 interface HelpDrawerProps {
   isOpen: boolean;
-  onClose: () => void;
+  onToggle: () => void;
   activeTab: TabType;
 }
 
-export function HelpDrawer({ isOpen, onClose, activeTab }: HelpDrawerProps) {
+const HELP: Record<TabType, { title: string; items: [string, string][] }> = {
+  markets: {
+    title: "Markets",
+    items: [
+      ["Hot", "The events with the most trading in the last 24 hours."],
+      ["Price movers", "Of those, the ones priced furthest from 50/50: strong consensus about the outcome."],
+      ["Closing soon", "Events that end within 7 days, soonest first."],
+      ["News", "A recent Google News headline for the event's title, when one arrives in time."],
+    ],
+  },
+  whales: {
+    title: "Whale trades",
+    items: [
+      ["What", "The largest of Polymarket's latest trades worth $1,000 or more, from its Data API."],
+      ["Time", "When the trade happened, not when this page fetched it."],
+      ["Who", "The trader's Polymarket pseudonym, or a shortened wallet address."],
+    ],
+  },
+  signals: {
+    title: "Signals",
+    items: [
+      ["Large trade", "A trade over $5,000. BUY or SELL repeats the trader's side; it is not advice."],
+      ["Extreme price", "A market above 90% or below 10%. WATCH only."],
+      ["High volume", "A market with over $100,000 traded. WATCH only."],
+      ["Weight", "A heuristic for sorting, not a probability."],
+    ],
+  },
+  explorer: {
+    title: "Search",
+    items: [
+      ["Search", "Uses Polymarket's own search over open events."],
+      ["Categories", "Each one searches a single representative word."],
+    ],
+  },
+  arbitrage: {
+    title: "Arbitrage",
+    items: [
+      ["Test", "Best YES ask + best NO ask under $1.00 after the assumed fee."],
+      ["Prices", "From the CLOB order books. When one side has no asks, the price Gamma lists is used and counted."],
+      ["Why it is usually empty", "Liquid markets are priced tightly, and edges close within seconds."],
+    ],
+  },
+};
+
+export function HelpDrawer({ isOpen, onToggle, activeTab }: HelpDrawerProps) {
+  const status = useStatus().data;
+  const help = HELP[activeTab];
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onToggle();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, onToggle]);
+
+  const settings: [string, string][] = status
+    ? [
+        [
+          "Scanning",
+          status.mode === "continuous"
+            ? `Continuous, every ${status.scan_interval_seconds}s`
+            : `On request, cached ${status.cache_ttl_seconds}s`,
+        ],
+        ["Markets per scan", `${status.market_limit} most liquid`],
+        ["Edge threshold", `${(status.min_profit_threshold * 100).toFixed(1)}%`],
+        ["Assumed fee", `$${status.fee.toFixed(2)} per $1 payout`],
+        ["Alerts", status.alerts === "off" ? "Off (need the local loop)" : status.alerts === "telegram" ? "Telegram" : "Console"],
+      ]
+    : [];
+
   return (
     <>
-      {/* Floating Help Button */}
       <button
-        onClick={() => onClose()}
-        className={`fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full
-          bg-dark-surface border-2 transition-all duration-300
-          flex items-center justify-center text-xl font-bold
-          ${
-            isOpen
-              ? "border-neon-magenta text-neon-magenta"
-              : "border-neon-cyan/50 text-neon-cyan hover:border-neon-cyan"
-          }`}
-        style={{
-          boxShadow: isOpen
-            ? "0 0 20px rgba(255, 0, 255, 0.4)"
-            : "0 0 10px rgba(0, 255, 255, 0.2)",
-        }}
+        onClick={onToggle}
+        aria-label={isOpen ? "Close help" : "Open help"}
+        className="fixed bottom-6 right-6 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-dark-border bg-dark-surface text-lg text-gray-300 shadow-lg transition-colors hover:border-gray-500 hover:text-white"
       >
         {isOpen ? "×" : "?"}
       </button>
 
-      {/* Backdrop */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Drawer Panel */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="fixed right-0 top-0 h-full w-96 bg-dark-gray/95
-              backdrop-blur-lg border-l border-dark-border z-50
-              overflow-y-auto p-6"
+      {isOpen && (
+        <>
+          <div onClick={onToggle} className="fixed inset-0 z-40 bg-black/50" aria-hidden />
+          <aside
+            role="dialog"
+            aria-label="Help"
+            className="fixed right-0 top-0 z-50 h-full w-full max-w-sm overflow-y-auto border-l border-dark-border bg-dark-gray p-6"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <NeonText color="cyan" size="lg">
-                HELP & INFO
-              </NeonText>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-white text-2xl"
-              >
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-100">{help.title}</h2>
+              <button onClick={onToggle} className="text-2xl text-gray-400 hover:text-white" aria-label="Close help">
                 ×
               </button>
             </div>
 
-            {/* Tab-Specific Content */}
-            <div className="space-y-6">
-              {activeTab === "markets" && <MarketActivityHelp />}
-              {activeTab === "whales" && <WhaleTrackerHelp />}
-              {activeTab === "signals" && <SignalsHelp />}
-              {activeTab === "explorer" && <MarketExplorerHelp />}
-              {activeTab === "arbitrage" && <ArbitrageHelp />}
-
-              {/* Market Stats - Always visible */}
-              <GlowingBorder className="p-4">
-                <NeonText color="cyan" size="md" className="mb-3">
-                  MARKET STATS
-                </NeonText>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Min Edge Threshold</span>
-                    <span className="text-neon-green font-mono">1.0%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Polymarket Fee</span>
-                    <span className="text-neon-yellow font-mono">2.0%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Scan Interval</span>
-                    <span className="text-neon-cyan font-mono">5s</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Mode</span>
-                    <span className="text-neon-magenta font-mono">
-                      DETECT ONLY
-                    </span>
-                  </div>
+            <dl className="space-y-4 text-sm">
+              {help.items.map(([term, text]) => (
+                <div key={term}>
+                  <dt className="mb-1 font-medium text-gray-200">{term}</dt>
+                  <dd className="text-gray-400">{text}</dd>
                 </div>
-              </GlowingBorder>
+              ))}
+            </dl>
 
-              {/* Disclaimer - Always visible */}
-              <GlowingBorder color="red" className="p-4">
-                <div className="text-neon-red text-xs font-semibold mb-2">
-                  DISCLAIMER
-                </div>
-                <p className="text-gray-500 text-xs">
-                  This tool is for educational purposes. Arbitrage opportunities
-                  may disappear quickly. Always verify prices before trading.
-                  Not financial advice.
-                </p>
-              </GlowingBorder>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {settings.length > 0 && (
+              <div className="mt-8 rounded-lg border border-dark-border bg-dark-surface p-4 text-sm">
+                <h3 className="mb-3 font-medium text-gray-200">This deployment</h3>
+                <dl className="space-y-2">
+                  {settings.map(([term, value]) => (
+                    <div key={term} className="flex justify-between gap-4">
+                      <dt className="text-gray-500">{term}</dt>
+                      <dd className="text-right font-mono text-xs text-gray-300">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+
+            <p className="mt-6 text-xs text-gray-500">
+              Research and paper trading only. It reads public data and cannot place a trade. Not financial advice.
+            </p>
+          </aside>
+        </>
+      )}
     </>
-  );
-}
-
-function MarketActivityHelp() {
-  return (
-    <GlowingBorder color="cyan" className="p-4">
-      <NeonText color="cyan" size="md" className="mb-3">
-        MARKET ACTIVITY
-      </NeonText>
-      <div className="space-y-3 text-sm">
-        <div>
-          <div className="text-neon-cyan font-semibold mb-1">HOT MARKETS</div>
-          <p className="text-gray-400">
-            Markets with the highest trading volume in the last 24 hours.
-            High volume indicates active interest.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-cyan font-semibold mb-1">PRICE MOVERS</div>
-          <p className="text-gray-400">
-            Markets with extreme prices (furthest from 50/50). These show
-            strong market consensus on likely outcomes.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-cyan font-semibold mb-1">CLOSING SOON</div>
-          <p className="text-gray-400">
-            Markets ending within 7 days. Resolution is imminent, so prices
-            should reflect true probabilities.
-          </p>
-        </div>
-      </div>
-    </GlowingBorder>
-  );
-}
-
-function WhaleTrackerHelp() {
-  return (
-    <GlowingBorder color="magenta" className="p-4">
-      <NeonText color="magenta" size="md" className="mb-3">
-        WHALE TRACKER
-      </NeonText>
-      <div className="space-y-3 text-sm">
-        <div>
-          <div className="text-neon-magenta font-semibold mb-1">REAL TRADES</div>
-          <p className="text-gray-400">
-            Live feed of large trades (&gt;$1,000) from the Polymarket Data API.
-            See what big players are buying and selling in real-time.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-magenta font-semibold mb-1">TRADE DETAILS</div>
-          <p className="text-gray-400">
-            Each trade shows: trader name, BUY/SELL action, YES/NO outcome,
-            share count, price, and total USD value.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-magenta font-semibold mb-1">MARKET INSIGHT</div>
-          <p className="text-gray-400">
-            Large buys often signal confidence in an outcome. Track whale
-            activity to understand market sentiment shifts.
-          </p>
-        </div>
-      </div>
-    </GlowingBorder>
-  );
-}
-
-function SignalsHelp() {
-  return (
-    <GlowingBorder color="orange" className="p-4">
-      <NeonText color="orange" size="md" className="mb-3">
-        MARKET SIGNALS
-      </NeonText>
-      <div className="space-y-3 text-sm">
-        <div>
-          <div className="text-neon-orange font-semibold mb-1">🐋 WHALE TRADES</div>
-          <p className="text-gray-400">
-            Signals from large trades (&gt;$5K). When big money moves, it often
-            indicates informed positioning. Higher USD = higher confidence.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-orange font-semibold mb-1">📈 PRICE SPIKES</div>
-          <p className="text-gray-400">
-            Markets with extreme prices (&gt;90% or &lt;10%). Shows strong market
-            consensus. Research before trading against momentum.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-orange font-semibold mb-1">🔥 VOLUME SURGES</div>
-          <p className="text-gray-400">
-            High-activity markets with significant trading volume. Good
-            liquidity means easier entry and exit for your trades.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-orange font-semibold mb-1">SIGNAL TYPES</div>
-          <p className="text-gray-400">
-            BUY_YES/BUY_NO = Trade in direction of whale. WATCH = Monitor only,
-            don&apos;t trade against momentum without research.
-          </p>
-        </div>
-      </div>
-    </GlowingBorder>
-  );
-}
-
-function MarketExplorerHelp() {
-  return (
-    <GlowingBorder color="yellow" className="p-4">
-      <NeonText color="yellow" size="md" className="mb-3">
-        MARKET EXPLORER
-      </NeonText>
-      <div className="space-y-3 text-sm">
-        <div>
-          <div className="text-neon-yellow font-semibold mb-1">SEARCH</div>
-          <p className="text-gray-400">
-            Search for any market by keyword. Try topics like "trump",
-            "bitcoin", "super bowl", or "fed rate".
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-yellow font-semibold mb-1">CATEGORIES</div>
-          <p className="text-gray-400">
-            Filter by category: Politics, Crypto, Sports, or Economy.
-            Click a filter to see related markets.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-yellow font-semibold mb-1">TRADE</div>
-          <p className="text-gray-400">
-            Click any market to open it directly on Polymarket where you
-            can view details and place trades.
-          </p>
-        </div>
-      </div>
-    </GlowingBorder>
-  );
-}
-
-function ArbitrageHelp() {
-  return (
-    <GlowingBorder className="p-4">
-      <NeonText color="cyan" size="md" className="mb-3">
-        HOW ARBITRAGE WORKS
-      </NeonText>
-      <div className="space-y-3 text-sm">
-        <div>
-          <div className="text-neon-cyan font-semibold mb-1">1. DETECT</div>
-          <p className="text-gray-400">
-            Scanner monitors all Polymarket binary markets for YES + NO prices
-            that sum to less than $1.00.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-cyan font-semibold mb-1">2. CALCULATE</div>
-          <p className="text-gray-400">
-            Profit = $1.00 payout - combined cost - 2% fee. Opportunities with
-            &gt;1% edge are shown.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-cyan font-semibold mb-1">3. ALERT</div>
-          <p className="text-gray-400">
-            New opportunities trigger alerts for quick manual execution.
-          </p>
-        </div>
-        <div>
-          <div className="text-neon-yellow font-semibold mb-1">WHY NO OPPORTUNITIES?</div>
-          <p className="text-gray-400">
-            Polymarket is usually efficiently priced. The diagnostics panel
-            shows exactly why markets are filtered (no liquidity, below threshold, etc.).
-          </p>
-        </div>
-      </div>
-    </GlowingBorder>
   );
 }

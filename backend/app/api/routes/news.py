@@ -2,7 +2,7 @@ from __future__ import annotations
 """Market intelligence endpoints - real trading signals from Polymarket activity."""
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.core.market_intelligence import get_market_intelligence, MarketSignal as IntelSignal
@@ -27,7 +27,7 @@ class SignalResponse(BaseModel):
 
 
 @router.get("", response_model=List[SignalResponse])
-async def get_market_signals(limit: int = 20):
+async def get_market_signals(limit: int = Query(default=20, ge=1, le=50)):
     """
     Get trading signals derived from real Polymarket activity.
 

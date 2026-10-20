@@ -35,17 +35,14 @@ class MarketsListResponse(BaseModel):
 @router.get("", response_model=MarketsListResponse)
 async def get_markets(
     limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    active: bool = Query(True),
+    offset: int = Query(0, ge=0, le=10000),
 ):
     """
-    Get list of active binary markets.
-
-    Returns markets with YES/NO prices from Polymarket.
+    Open two-outcome markets, most liquid first, with the prices Gamma lists.
     """
     gamma = GammaClient()
     try:
-        markets = await gamma.get_markets(limit=limit, offset=offset, active=active)
+        markets = await gamma.get_markets(limit=limit, offset=offset)
 
         responses = []
         for market in markets:
@@ -125,8 +122,11 @@ async def get_market_orderbook(market_id: str):
         if not market.yes_token or not market.no_token:
             raise HTTPException(status_code=400, detail="Market is not binary")
 
-        yes_book = await clob.get_order_book(market.yes_token.token_id)
-        no_book = await clob.get_order_book(market.no_token.token_id)
+        batch = await clob.get_order_books([market.yes_token.token_id, market.no_token.token_id])
+        yes_book = batch.books.get(market.yes_token.token_id)
+        no_book = batch.books.get(market.no_token.token_id)
+        if yes_book is None or no_book is None:
+            raise HTTPException(status_code=502, detail="The CLOB did not return both order books")
 
         return {
             "market_id": market_id,

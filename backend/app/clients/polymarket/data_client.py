@@ -4,8 +4,9 @@ import logging
 from typing import Any, Optional, List
 from datetime import datetime, timezone
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
 from pydantic import BaseModel
+
+from .http import get_json, new_client
 
 logger = logging.getLogger(__name__)
 
@@ -67,35 +68,25 @@ class DataClient:
     - Market activity
     """
 
-    def __init__(self, base_url: str = DATA_API_URL):
-        self.base_url = base_url
-        self._client: Optional[httpx.AsyncClient] = None
+    def __init__(self, base_url: str = DATA_API_URL, http: Optional[httpx.AsyncClient] = None):
+        self.base_url = base_url.rstrip("/")
+        self._http = http
+        self._owns_http = http is None
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=30.0,
-                headers={"Accept": "application/json"},
-            )
-        return self._client
+    @property
+    def http(self) -> httpx.AsyncClient:
+        if self._http is None or self._http.is_closed:
+            self._http = new_client()
+            self._owns_http = True
+        return self._http
 
     async def close(self):
-        """Close the HTTP client."""
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
+        """Close the HTTP client if this instance made it."""
+        if self._owns_http and self._http is not None and not self._http.is_closed:
+            await self._http.aclose()
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
-    )
     async def _get(self, endpoint: str, params: dict | None = None) -> Any:
-        """Make GET request with retry logic."""
-        client = await self._get_client()
-        response = await client.get(endpoint, params=params)
-        response.raise_for_status()
-        return response.json()
+        return await get_json(self.http, f"{self.base_url}{endpoint}", params)
 
     async def get_recent_trades(
         self,
@@ -133,24 +124,16 @@ class DataClient:
         if side:
             params["side"] = side
 
-        try:
-            data = await self._get("/trades", params=params)
-            trades = []
-
-            for item in data:
-                try:
-                    trade = self._parse_trade(item)
-                    if trade:
-                        trades.append(trade)
-                except Exception as e:
-                    logger.warning(f"Failed to parse trade: {e}")
-
-            logger.info(f"Fetched {len(trades)} trades from Data API")
-            return trades
-
-        except Exception as e:
-            logger.error(f"Failed to fetch trades: {e}")
-            return []
+        # A failed request raises, so the dashboard can say so instead of
+        # showing an empty list as if nobody had traded.
+        data = await self._get("/trades", params=params)
+        trades = []
+        for item in data if isinstance(data, list) else []:
+            trade = self._parse_trade(item)
+            if trade:
+                trades.append(trade)
+        logger.info(f"Fetched {len(trades)} trades from Data API")
+        return trades
 
     async def get_large_trades(
         self,

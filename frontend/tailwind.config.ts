@@ -9,56 +9,38 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Cyberpunk color palette
+        // The old neon names, toned down: accents for headings, prices and states.
         neon: {
-          cyan: "#00ffff",
-          magenta: "#ff00ff",
-          yellow: "#ffff00",
-          green: "#00ff00",
-          red: "#ff0044",
-          orange: "#ff8800",
+          cyan: "#62b6c8",
+          magenta: "#b597d6",
+          yellow: "#d8b45c",
+          green: "#52bd88",
+          red: "#e06c6c",
+          orange: "#dd965c",
         },
         void: {
-          black: "#0a0a0f",
-          darker: "#050508",
+          black: "#0d1117",
+          darker: "#090c10",
         },
         dark: {
-          gray: "#1a1a2e",
-          lighter: "#2a2a4e",
-          border: "#3a3a5e",
-          surface: "#16162a",
+          gray: "#121821",
+          lighter: "#232c38",
+          border: "#26303d",
+          surface: "#161d27",
         },
       },
       fontFamily: {
-        mono: ["JetBrains Mono", "Fira Code", "monospace"],
-      },
-      boxShadow: {
-        neon: "0 0 5px theme('colors.neon.cyan'), 0 0 20px theme('colors.neon.cyan')",
-        "neon-magenta":
-          "0 0 5px theme('colors.neon.magenta'), 0 0 20px theme('colors.neon.magenta')",
-        "neon-green":
-          "0 0 5px theme('colors.neon.green'), 0 0 20px theme('colors.neon.green')",
-        "neon-red":
-          "0 0 5px theme('colors.neon.red'), 0 0 20px theme('colors.neon.red')",
-        "neon-orange":
-          "0 0 5px theme('colors.neon.orange'), 0 0 20px theme('colors.neon.orange')",
-        "neon-yellow":
-          "0 0 5px theme('colors.neon.yellow'), 0 0 20px theme('colors.neon.yellow')",
-      },
-      animation: {
-        pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        glow: "glow 2s ease-in-out infinite alternate",
-        scanline: "scanline 8s linear infinite",
-      },
-      keyframes: {
-        glow: {
-          "0%": { opacity: "0.5" },
-          "100%": { opacity: "1" },
-        },
-        scanline: {
-          "0%": { transform: "translateY(-100%)" },
-          "100%": { transform: "translateY(100vh)" },
-        },
+        sans: [
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica Neue",
+          "Arial",
+          "sans-serif",
+        ],
+        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
     },
   },

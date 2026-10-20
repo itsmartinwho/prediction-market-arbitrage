@@ -1,238 +1,98 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
 import { GlowingBorder } from "../shared/GlowingBorder";
 import { NeonText } from "../shared/NeonText";
-import { PulsingDot } from "../shared/PulsingDot";
-import { fetchNews } from "@/lib/api";
+import { EmptyState, ErrorState, LoadingState, StaleNotice } from "../shared/QueryState";
+import { fetchSignals } from "@/lib/api";
+import { timeAgo } from "@/lib/format";
+import { useNow } from "@/hooks/useNow";
 import { MarketSignal } from "@/types/news";
 
-function getSignalColor(signal: string): string {
-  if (signal.includes("BUY")) return "text-neon-green";
-  if (signal.includes("SELL")) return "text-neon-red";
-  return "text-neon-yellow";
+const TYPE_LABEL: Record<string, string> = {
+  whale_trade: "Large trade",
+  price_spike: "Extreme price",
+  volume_surge: "High volume",
+};
+
+function signalTone(signal: string): string {
+  if (signal.startsWith("BUY")) return "bg-neon-green/15 text-neon-green";
+  if (signal.startsWith("SELL")) return "bg-neon-red/15 text-neon-red";
+  return "bg-dark-lighter text-gray-300";
 }
 
-function getSignalBgColor(signal: string): string {
-  if (signal.includes("BUY")) return "bg-neon-green/10";
-  if (signal.includes("SELL")) return "bg-neon-red/10";
-  return "bg-neon-yellow/10";
-}
-
-function getTypeIcon(type: string): string {
-  switch (type) {
-    case "whale_trade":
-      return "🐋";
-    case "price_spike":
-      return "📈";
-    case "volume_surge":
-      return "🔥";
-    default:
-      return "📊";
-  }
-}
-
-function getTypeLabel(type: string): string {
-  switch (type) {
-    case "whale_trade":
-      return "WHALE";
-    case "price_spike":
-      return "PRICE";
-    case "volume_surge":
-      return "VOLUME";
-    default:
-      return "SIGNAL";
-  }
-}
-
-function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${Math.floor(diffHours / 24)}d ago`;
-}
-
-function SignalCard({
-  signal,
-  index,
-}: {
-  signal: MarketSignal;
-  index: number;
-}) {
-  const isActionable = signal.signal !== "WATCH";
-
+function SignalCard({ signal, now }: { signal: MarketSignal; now: number }) {
   return (
-    <motion.a
+    <a
       href={signal.market_url}
       target="_blank"
       rel="noopener noreferrer"
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.03 }}
-      className="block p-4 bg-dark-surface rounded-lg border border-dark-border
-                 hover:border-neon-orange/40 transition-all duration-200 group"
+      className="group block rounded-lg border border-dark-border bg-dark-surface p-4 transition-colors hover:border-gray-500"
     >
-      {/* Header: Type + Signal + Time */}
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-lg" title={signal.type}>
-            {getTypeIcon(signal.type)}
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-gray-400">{TYPE_LABEL[signal.type] ?? "Signal"}</span>
+          <span className={`rounded px-2 py-0.5 font-mono ${signalTone(signal.signal)}`}>
+            {signal.signal.replace(/_/g, " ")}
           </span>
-          <span className="text-xs text-gray-500 font-mono">
-            {getTypeLabel(signal.type)}
-          </span>
-          <span
-            className={`text-xs font-bold px-2 py-0.5 rounded ${getSignalColor(
-              signal.signal
-            )} ${getSignalBgColor(signal.signal)}`}
-          >
-            {signal.signal.replace("_", " ")}
-          </span>
-          <span className="text-xs text-gray-500">
-            {(signal.confidence * 100).toFixed(0)}% conf
-          </span>
+          <span className="text-gray-500">{(signal.confidence * 100).toFixed(0)}% weight</span>
         </div>
-        <span className="text-xs text-gray-500">
-          {formatTimeAgo(signal.detected_at)}
-        </span>
+        <span className="shrink-0 text-xs text-gray-500">{timeAgo(signal.detected_at, now)}</span>
       </div>
 
-      {/* Title */}
-      <h3 className="text-sm font-semibold text-neon-orange mb-1 group-hover:text-white transition-colors">
-        {signal.title}
-      </h3>
-
-      {/* Market Question */}
-      <p className="text-xs text-gray-400 mb-2 line-clamp-2">
-        {signal.market_question}
-      </p>
-
-      {/* Summary */}
-      <p className="text-xs text-gray-500 mb-2">{signal.summary}</p>
-
-      {/* Reasoning */}
-      <div className="text-xs text-gray-600 italic border-l-2 border-neon-orange/30 pl-2">
-        {signal.reasoning}
-      </div>
-
-      {/* Current Price if available */}
-      {signal.current_price !== null && (
-        <div className="mt-2 text-xs">
-          <span className="text-gray-500">Current: </span>
-          <span className="text-neon-cyan font-mono">
-            {(signal.current_price * 100).toFixed(1)}%
-          </span>
-        </div>
-      )}
-    </motion.a>
+      <h3 className="mb-1 text-sm font-medium text-neon-orange">{signal.title}</h3>
+      <p className="mb-2 line-clamp-2 text-xs text-gray-300">{signal.market_question}</p>
+      <p className="mb-2 text-xs text-gray-500">{signal.summary}</p>
+      <p className="border-l-2 border-dark-lighter pl-2 text-xs text-gray-500">{signal.reasoning}</p>
+    </a>
   );
 }
 
 export function SignalsFeed() {
-  const {
-    data: signals,
-    isLoading,
-    error,
-  } = useQuery<MarketSignal[]>({
+  const now = useNow(15_000);
+  const query = useQuery<MarketSignal[]>({
     queryKey: ["market-signals"],
-    queryFn: () => fetchNews(20),
-    refetchInterval: 30000, // Refresh every 30 seconds
+    queryFn: () => fetchSignals(20),
+    refetchInterval: 60_000,
   });
 
-  const actionableSignals =
-    signals?.filter((s) => s.signal !== "WATCH").length || 0;
+  const signals = query.data ?? [];
 
   return (
-    <GlowingBorder color="orange" className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <NeonText color="orange" size="lg">
-            MARKET SIGNALS
-          </NeonText>
-          {actionableSignals > 0 && <PulsingDot color="orange" size="sm" />}
-        </div>
-        <span className="text-gray-500 text-xs">
-          {actionableSignals > 0
-            ? `${actionableSignals} actionable signal${
-                actionableSignals !== 1 ? "s" : ""
-              }`
-            : "Monitoring market activity"}
-        </span>
+    <GlowingBorder color="orange" className="p-4 sm:p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <NeonText color="orange" size="lg">
+          Signals
+        </NeonText>
+        <span className="text-xs text-gray-500">Rules of thumb, not predictions</span>
       </div>
 
-      {/* Signals List */}
-      <AnimatePresence mode="wait">
-        {isLoading ? (
-          <motion.div
-            key="loading"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center py-12"
-          >
-            <motion.div
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="text-neon-orange"
-            >
-              Analyzing market activity...
-            </motion.div>
-          </motion.div>
-        ) : error ? (
-          <motion.div
-            key="error"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center py-12 text-gray-500"
-          >
-            <p>Failed to load market signals.</p>
-            <p className="text-xs mt-2">Please try again later.</p>
-          </motion.div>
-        ) : (signals?.length || 0) === 0 ? (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center py-12 text-gray-500"
-          >
-            <p>No signals detected.</p>
-            <p className="text-xs mt-2">
-              Watching for whale trades, price spikes, and volume surges.
-            </p>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="results"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="space-y-3 max-h-[550px] overflow-y-auto pr-2"
-          >
-            {signals?.map((signal, index) => (
-              <SignalCard key={signal.id} signal={signal} index={index} />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {query.isPending ? (
+        <LoadingState what="signals" />
+      ) : query.isError && !query.data ? (
+        <ErrorState what="signals" error={query.error} onRetry={() => query.refetch()} />
+      ) : (
+        <>
+          {query.isError && <StaleNotice error={query.error} />}
+          {signals.length === 0 ? (
+            <EmptyState
+              title="No signals right now."
+              hint="A signal is a trade over $5,000, a market above 90% or below 10%, or one with over $100,000 of volume."
+            />
+          ) : (
+            <div className="max-h-[600px] space-y-3 overflow-y-auto pr-1">
+              {signals.map((signal) => (
+                <SignalCard key={signal.id} signal={signal} now={now} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
-      {/* Footer */}
-      <div className="mt-4 pt-3 border-t border-dark-border">
-        <p className="text-gray-500 text-xs">
-          <span className="text-neon-orange">REAL DATA:</span> Signals derived
-          from live Polymarket trades and market activity. Click any signal to
-          trade.
-        </p>
-      </div>
+      <p className="mt-4 border-t border-dark-border pt-3 text-xs text-gray-500">
+        Read off the same live data: large trades, extreme prices and high volume. The weight is a heuristic, not a
+        probability.
+      </p>
     </GlowingBorder>
   );
 }

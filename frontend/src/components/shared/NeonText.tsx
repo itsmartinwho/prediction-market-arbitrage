@@ -1,13 +1,9 @@
-"use client";
-
-import { motion } from "framer-motion";
 import { ReactNode } from "react";
 
 interface NeonTextProps {
   children: ReactNode;
   color?: "cyan" | "magenta" | "green" | "yellow" | "orange";
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
-  animate?: boolean;
   className?: string;
 }
 
@@ -27,30 +23,11 @@ const sizeClasses = {
   "2xl": "text-2xl",
 };
 
-export function NeonText({
-  children,
-  color = "cyan",
-  size = "md",
-  animate = false,
-  className = "",
-}: NeonTextProps) {
-  const Component = animate ? motion.span : "span";
-
+/** A section heading in its panel's accent colour. */
+export function NeonText({ children, color = "cyan", size = "md", className = "" }: NeonTextProps) {
   return (
-    <Component
-      className={`
-        ${colorClasses[color]}
-        ${sizeClasses[size]}
-        neon-text
-        font-mono font-semibold
-        ${className}
-      `}
-      {...(animate && {
-        animate: { opacity: [0.7, 1, 0.7] },
-        transition: { duration: 2, repeat: Infinity },
-      })}
-    >
+    <h2 className={`${colorClasses[color]} ${sizeClasses[size]} font-semibold tracking-tight ${className}`}>
       {children}
-    </Component>
+    </h2>
   );
 }
