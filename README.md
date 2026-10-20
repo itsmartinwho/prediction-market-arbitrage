@@ -70,11 +70,11 @@ It keeps the market if `net` is positive and `edge` is at least `MIN_PROFIT_THRE
 
 ## Stack
 
-FastAPI, httpx and aiogram (Telegram) on Python 3.13; Next.js 14 with React 18, Tailwind and TanStack Query; Vercel Services, Functions and CDN cache.
+FastAPI, httpx and aiogram (Telegram) on Python 3.13; Next.js 16 with React 19, Tailwind 3 and TanStack Query; Vercel Services, Functions and CDN cache.
 
 ## Run it locally
 
-You need Python 3.9 or newer and Node 20 or newer. The tests pass on Python 3.9 and 3.13; Vercel runs 3.13.
+You need Python 3.9 or newer and Node 20.9 or newer. The tests pass on Python 3.9 and 3.13; Vercel runs 3.13.
 
 ### Backend (continuous mode, with alerts)
 
