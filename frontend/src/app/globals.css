@@ -17,6 +17,11 @@ body {
   @apply bg-void-black font-sans text-gray-200 antialiased;
 }
 
+.font-mono,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

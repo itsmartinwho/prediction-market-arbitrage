@@ -27,8 +27,26 @@ class OpportunityResponse(BaseModel):
     edge_percent: float
     yes_token_id: Optional[str] = None
     no_token_id: Optional[str] = None
+    best_ask_size: Optional[float] = None
+    max_executable_size: Optional[float] = None
+    max_executable_profit: Optional[float] = None
+    vwap_combined_cost: Optional[float] = None
+    used_fallback: bool = False
     detected_at: datetime
     platform: str = "polymarket"
+
+
+class ClosestMarketResponse(BaseModel):
+    market_id: str
+    market_question: str
+    yes_ask: float
+    no_ask: float
+    combined_cost: float
+    gross_spread: float
+    net_spread: float
+    distance_to_arb: float
+    best_ask_size: Optional[float] = None
+    used_fallback: bool = False
 
 
 class ScanDiagnosticsResponse(BaseModel):
@@ -44,6 +62,7 @@ class ScanDiagnosticsResponse(BaseModel):
     filtered_below_threshold: int
     opportunities_found: int
     threshold_percent: float
+    closest_markets: list[ClosestMarketResponse] = []
 
 
 class OpportunitiesResponse(BaseModel):
@@ -81,6 +100,11 @@ def _opportunity(o: Opportunity) -> OpportunityResponse:
         edge_percent=o.edge_percent,
         yes_token_id=o.yes_token_id,
         no_token_id=o.no_token_id,
+        best_ask_size=o.best_ask_size,
+        max_executable_size=o.max_executable_size,
+        max_executable_profit=o.max_executable_profit,
+        vwap_combined_cost=o.vwap_combined_cost,
+        used_fallback=o.used_fallback,
         detected_at=o.detected_at,
         platform=o.platform,
     )

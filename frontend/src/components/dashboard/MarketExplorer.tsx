@@ -58,7 +58,7 @@ export function MarketExplorer() {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Search markets, e.g. trump, bitcoin, super bowl"
           maxLength={100}
-          className="w-full rounded-lg border border-dark-border bg-dark-surface px-4 py-3 text-sm text-gray-100 placeholder-gray-500 transition-colors focus:border-neon-yellow/60 focus:outline-none"
+          className="w-full rounded-lg border border-dark-border bg-dark-surface px-4 py-3 text-sm text-gray-100 placeholder-gray-500 transition-colors focus:border-neon-cyan/60 focus:outline-none"
         />
       </label>
 
@@ -73,7 +73,7 @@ export function MarketExplorer() {
             }}
             className={`rounded px-3 py-1.5 text-xs transition-colors ${
               category === c.id && !debounced
-                ? "border border-neon-yellow/50 bg-neon-yellow/10 text-neon-yellow"
+                ? "border border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan"
                 : "border border-dark-border bg-dark-surface text-gray-400 hover:border-gray-500"
             }`}
           >
@@ -82,7 +82,7 @@ export function MarketExplorer() {
         ))}
       </div>
 
-      <div className="mb-4 flex items-center justify-between text-xs text-gray-500">
+      <div className="mb-4 flex items-center justify-between text-xs text-gray-500 tabular-nums">
         <span>{query ? `Results for "${query}"` : "The most traded events"}</span>
         {result.data && <span>{markets.length} events</span>}
       </div>
@@ -97,7 +97,7 @@ export function MarketExplorer() {
           {markets.length === 0 ? (
             <EmptyState title={`No open events match "${query}".`} hint="Try a shorter or more general word." />
           ) : (
-            <div className="max-h-[600px] space-y-2 overflow-y-auto pr-1">
+            <div className="space-y-2">
               {markets.map((market) => (
                 <MarketCard key={market.id} market={market} now={now} />
               ))}

@@ -8,11 +8,11 @@ interface NeonTextProps {
 }
 
 const colorClasses = {
-  cyan: "text-neon-cyan",
-  magenta: "text-neon-magenta",
-  green: "text-neon-green",
-  yellow: "text-neon-yellow",
-  orange: "text-neon-orange",
+  cyan: "text-gray-100",
+  magenta: "text-gray-100",
+  green: "text-gray-100",
+  yellow: "text-gray-100",
+  orange: "text-gray-100",
 };
 
 const sizeClasses = {
@@ -23,7 +23,7 @@ const sizeClasses = {
   "2xl": "text-2xl",
 };
 
-/** A section heading in its panel's accent colour. */
+/** A clean section heading with disciplined typographic hierarchy. */
 export function NeonText({ children, color = "cyan", size = "md", className = "" }: NeonTextProps) {
   return (
     <h2 className={`${colorClasses[color]} ${sizeClasses[size]} font-semibold tracking-tight ${className}`}>

@@ -8,8 +8,8 @@ Live at [prediction-market-arbitrage.vercel.app](https://prediction-market-arbit
 
 ## What it does
 
-- **Arbitrage scan.** Checks the most liquid two-outcome markets for YES ask + NO ask under $1.00 after an assumed fee.
-- **Dashboard.** Five tabs: Markets (hot, price movers and closing soon, each with a recent news headline), Whale trades, Signals, Search and Arbitrage. Each tab has a link, such as `/#whales`.
+- **Arbitrage scan & order book depth.** Checks the most liquid two-outcome markets for YES ask + NO ask under $1.00 after an assumed fee, walks the full YES and NO ask ladders (`compute_book_depth` in `backend/app/core/arbitrage/yes_no_arb.py`) to compute executable share capacity (`max_executable_size`), total net dollar profit (`max_executable_profit`), and book VWAP (`vwap_combined_cost`), and surfaces a **Near-Arb Watchlist** of the 8 tightest binary order books even when no market clears the net threshold.
+- **Dashboard.** Five tabs: Markets (hot, price movers and closing soon, each with a recent news headline), Whale trades, Signals, Search and Arbitrage (with an interactive client-side Fee & Minimum Edge Inspector). Each tab has a link, such as `/#whales`.
 - **Whale trades.** The largest of the latest trades of $1,000 or more, from Polymarket's Data API, with trader, side, size, price and when it happened.
 - **Signals.** Heuristics read off the same data: a trade over $5,000, a market priced above 90% or below 10%, a market with over $100,000 of volume.
 - **Alerts.** Printed to the console, and sent to Telegram if you configure it. Only in continuous mode (below), so not on Vercel.
@@ -64,7 +64,7 @@ edge  = net / cost
 
 It keeps the market if `net` is positive and `edge` is at least `MIN_PROFIT_THRESHOLD` (1% by default). Example: YES 0.48 and NO 0.49 cost 0.97, which is 0.03 gross, 0.01 net, and a 1.03% edge. On 20 October 2026 none of the 200 or 980 markets cleared the bar, and the Arbitrage tab is usually empty: liquid markets are priced tightly.
 
-**Fees and slippage.** The 0.02 is an assumption written into `yes_no_arb.py`, a flat two cents per dollar of payout. It is not read from Polymarket, so check the current fee schedule before trusting a number. Slippage is not modelled: only the best ask is used and order size and depth are ignored.
+**Fees, order book depth, and near-arb watchlist.** The 0.02 is an assumption written into `yes_no_arb.py`, a flat two cents per dollar of payout. In the Arbitrage tab, a client-side Fee & Edge Threshold slider lets you test custom fee assumptions (0.0%–3.0%) and minimum edge filters against both active opportunities and the **Near-Arb Watchlist** (`diagnostics.closest_markets`, the 8 binary markets with the lowest combined YES + NO best ask) without triggering additional API calls. When CLOB order books are present, `compute_book_depth` walks the YES and NO ask ladders in lockstep while marginal combined ask + fee < $1.00 to report top-of-book size (`best_ask_size`), total profitable share capacity (`max_executable_size`), total executable net profit (`max_executable_profit`), and book VWAP (`vwap_combined_cost`).
 
 **The alert.** Plain text: the market question, the YES and NO asks and their sum, gross and net profit with the edge percentage, the time it was detected and the platform. An opportunity is alerted once while its combined cost stays the same; a new cost is a new alert. State is in memory, so a restart alerts again.
 

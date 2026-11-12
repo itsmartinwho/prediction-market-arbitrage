@@ -96,7 +96,7 @@ export function MarketActivity() {
           {markets.length === 0 ? (
             <EmptyState title="No markets in this list right now." />
           ) : (
-            <div className="max-h-[640px] space-y-3 overflow-y-auto pr-1">
+            <div className="space-y-3">
               {markets.map((market) => (
                 <MarketCard key={market.id} market={market} now={now} />
               ))}

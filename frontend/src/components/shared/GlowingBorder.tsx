@@ -8,14 +8,14 @@ interface GlowingBorderProps {
   className?: string;
 }
 
-// The panel's accent is a thin top rule; the rest stays quiet.
+// Disciplined quantitative surface: uniform dark slate card with subtle top rule.
 const accent = {
-  cyan: "border-t-neon-cyan/60",
-  magenta: "border-t-neon-magenta/60",
-  green: "border-t-neon-green/60",
-  red: "border-t-neon-red/60",
-  yellow: "border-t-neon-yellow/60",
-  orange: "border-t-neon-orange/60",
+  cyan: "border-t-neon-cyan/45",
+  magenta: "border-t-neon-cyan/45",
+  green: "border-t-neon-green/50",
+  red: "border-t-neon-red/50",
+  yellow: "border-t-neon-cyan/45",
+  orange: "border-t-neon-cyan/45",
 };
 
 export function GlowingBorder({ children, color = "cyan", className = "" }: GlowingBorderProps) {

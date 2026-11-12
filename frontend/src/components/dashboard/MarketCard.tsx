@@ -14,7 +14,7 @@ export function MarketCard({ market, now }: { market: MarketSummary; now: number
         </h3>
       </a>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
         <div className="flex items-center gap-4">
           {market.market_count === 1 ? (
             <>
@@ -46,7 +46,7 @@ export function MarketCard({ market, now }: { market: MarketSummary; now: number
           className="mt-3 block border-t border-dark-border/60 pt-3"
         >
           <p className="line-clamp-2 text-xs text-gray-400 hover:text-gray-200">
-            <span className="mr-2 text-neon-orange">News</span>
+            <span className="mr-2 font-mono text-[11px] uppercase tracking-wider text-neon-cyan">News</span>
             {market.news.title}
           </p>
           <span className="mt-1 block text-xs text-gray-600">{market.news.source}</span>

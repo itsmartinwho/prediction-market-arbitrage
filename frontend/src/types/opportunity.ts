@@ -11,8 +11,26 @@ export interface Opportunity {
   edge_percent: number;
   yes_token_id?: string | null;
   no_token_id?: string | null;
+  best_ask_size?: number | null;
+  max_executable_size?: number | null;
+  max_executable_profit?: number | null;
+  vwap_combined_cost?: number | null;
+  used_fallback?: boolean;
   detected_at: string;
   platform: string;
+}
+
+export interface ClosestMarket {
+  market_id: string;
+  market_question: string;
+  yes_ask: number;
+  no_ask: number;
+  combined_cost: number;
+  gross_spread: number;
+  net_spread: number;
+  distance_to_arb: number;
+  best_ask_size?: number | null;
+  used_fallback?: boolean;
 }
 
 export interface ScanDiagnostics {
@@ -26,6 +44,7 @@ export interface ScanDiagnostics {
   filtered_below_threshold: number;
   opportunities_found: number;
   threshold_percent: number;
+  closest_markets?: ClosestMarket[];
 }
 
 export type ScannerMode = "on_request" | "continuous";

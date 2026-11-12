@@ -14,17 +14,75 @@ Example: YES 0.48 + NO 0.49 = 0.97, so 0.03 gross, 0.01 net, a 1.03% edge.
 """
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from app.config import get_settings
-from app.models.market import Market
+from app.models.market import Market, OrderBook
 from app.models.opportunity import Opportunity, OpportunityType
 
 logger = logging.getLogger(__name__)
 
 
+def compute_book_depth(
+    yes_book: Optional[OrderBook],
+    no_book: Optional[OrderBook],
+    fee: float,
+) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+    """Walk YES and NO ask ladders in lockstep to calculate executable capacity.
+
+    Returns (best_ask_size, max_executable_size, max_executable_profit, vwap_combined_cost).
+    """
+    if not yes_book or not no_book or not yes_book.asks or not no_book.asks:
+        return None, None, None, None
+
+    best_ask_size = min(yes_book.asks[0].size, no_book.asks[0].size)
+
+    yi, ni = 0, 0
+    y_rem = yes_book.asks[0].size
+    n_rem = no_book.asks[0].size
+    total_size = 0.0
+    total_cost = 0.0
+    total_net_profit = 0.0
+
+    while yi < len(yes_book.asks) and ni < len(no_book.asks):
+        y_price = yes_book.asks[yi].price
+        n_price = no_book.asks[ni].price
+        combined = y_price + n_price
+        net_per_share = (1.0 - combined) - fee
+        if net_per_share <= 0:
+            break
+
+        matched = min(y_rem, n_rem)
+        if matched > 0:
+            total_size += matched
+            total_cost += matched * combined
+            total_net_profit += matched * net_per_share
+
+        y_rem -= matched
+        n_rem -= matched
+        if y_rem <= 1e-9:
+            yi += 1
+            if yi < len(yes_book.asks):
+                y_rem = yes_book.asks[yi].size
+        if n_rem <= 1e-9:
+            ni += 1
+            if ni < len(no_book.asks):
+                n_rem = no_book.asks[ni].size
+
+    if total_size <= 0:
+        return round(best_ask_size, 2), None, None, None
+
+    vwap_cost = total_cost / total_size
+    return (
+        round(best_ask_size, 2),
+        round(total_size, 2),
+        round(total_net_profit, 4),
+        round(vwap_cost, 4),
+    )
+
+
 class ScanDiagnostics:
-    """Counts why markets were set aside during a scan."""
+    """Counts why markets were set aside during a scan and tracks tightest spreads."""
 
     def __init__(self):
         self.reset()
@@ -39,8 +97,36 @@ class ScanDiagnostics:
         self.not_profitable = 0
         self.below_threshold = 0
         self.opportunities_found = 0
+        self._candidates: list[dict] = []
+
+    def record_candidate(
+        self,
+        market: Market,
+        yes_ask: float,
+        no_ask: float,
+        fee: float,
+        best_ask_size: Optional[float] = None,
+        used_fallback: bool = False,
+    ):
+        combined_cost = yes_ask + no_ask
+        gross_spread = 1.0 - combined_cost
+        net_spread = gross_spread - fee
+        distance_to_arb = max(0.0, combined_cost - (1.0 - fee))
+        self._candidates.append({
+            "market_id": market.id,
+            "market_question": market.question,
+            "yes_ask": round(yes_ask, 4),
+            "no_ask": round(no_ask, 4),
+            "combined_cost": round(combined_cost, 4),
+            "gross_spread": round(gross_spread, 4),
+            "net_spread": round(net_spread, 4),
+            "distance_to_arb": round(distance_to_arb, 4),
+            "best_ask_size": best_ask_size,
+            "used_fallback": used_fallback,
+        })
 
     def to_dict(self) -> dict:
+        closest = sorted(self._candidates, key=lambda c: c["combined_cost"])[:8]
         return {
             "total_markets": self.total_markets,
             "filtered_not_binary": self.not_binary,
@@ -51,6 +137,7 @@ class ScanDiagnostics:
             "filtered_not_profitable": self.not_profitable,
             "filtered_below_threshold": self.below_threshold,
             "opportunities_found": self.opportunities_found,
+            "closest_markets": closest,
         }
 
 
@@ -95,6 +182,8 @@ class YesNoArbitrageDetector:
         yes_ask: Optional[float],
         no_ask: Optional[float],
         clob_failed: bool = False,
+        yes_book: Optional[OrderBook] = None,
+        no_book: Optional[OrderBook] = None,
     ) -> Optional[Opportunity]:
         """Apply the YES + NO test to one market's asks. Counts into diagnostics."""
         if clob_failed:
@@ -110,6 +199,19 @@ class YesNoArbitrageDetector:
         if yes_ask is None or no_ask is None:
             self.diagnostics.no_clob_liquidity += 1
             return None
+
+        best_ask_size, max_exec_size, max_exec_profit, vwap_cost = compute_book_depth(
+            yes_book, no_book, self.POLYMARKET_FEE
+        )
+
+        self.diagnostics.record_candidate(
+            market=market,
+            yes_ask=yes_ask,
+            no_ask=no_ask,
+            fee=self.POLYMARKET_FEE,
+            best_ask_size=best_ask_size,
+            used_fallback=used_fallback,
+        )
 
         combined_cost = yes_ask + no_ask
         gross_profit = 1.0 - combined_cost
@@ -142,6 +244,12 @@ class YesNoArbitrageDetector:
             edge_percent=edge_percent,
             yes_token_id=market.yes_token.token_id if market.yes_token else None,
             no_token_id=market.no_token.token_id if market.no_token else None,
+            max_size=max_exec_size or best_ask_size,
+            best_ask_size=best_ask_size,
+            max_executable_size=max_exec_size,
+            max_executable_profit=max_exec_profit,
+            vwap_combined_cost=vwap_cost,
+            used_fallback=used_fallback,
             detected_at=datetime.now(timezone.utc),
             platform="polymarket",
         )
@@ -190,6 +298,8 @@ class YesNoArbitrageDetector:
                 yes_book.best_ask if yes_book else None,
                 no_book.best_ask if no_book else None,
                 clob_failed=yes_id in batch.failed or no_id in batch.failed,
+                yes_book=yes_book,
+                no_book=no_book,
             )
             if opp:
                 opportunities.append(opp)

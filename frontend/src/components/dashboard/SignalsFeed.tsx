@@ -30,17 +30,17 @@ function SignalCard({ signal, now }: { signal: MarketSignal; now: number }) {
       className="group block rounded-lg border border-dark-border bg-dark-surface p-4 transition-colors hover:border-gray-500"
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
           <span className="text-gray-400">{TYPE_LABEL[signal.type] ?? "Signal"}</span>
           <span className={`rounded px-2 py-0.5 font-mono ${signalTone(signal.signal)}`}>
             {signal.signal.replace(/_/g, " ")}
           </span>
           <span className="text-gray-500">{(signal.confidence * 100).toFixed(0)}% weight</span>
         </div>
-        <span className="shrink-0 text-xs text-gray-500">{timeAgo(signal.detected_at, now)}</span>
+        <span className="shrink-0 text-xs text-gray-500 tabular-nums">{timeAgo(signal.detected_at, now)}</span>
       </div>
 
-      <h3 className="mb-1 text-sm font-medium text-neon-orange">{signal.title}</h3>
+      <h3 className="mb-1 text-sm font-medium text-gray-100">{signal.title}</h3>
       <p className="mb-2 line-clamp-2 text-xs text-gray-300">{signal.market_question}</p>
       <p className="mb-2 text-xs text-gray-500">{signal.summary}</p>
       <p className="border-l-2 border-dark-lighter pl-2 text-xs text-gray-500">{signal.reasoning}</p>
@@ -80,7 +80,7 @@ export function SignalsFeed() {
               hint="A signal is a trade over $5,000, a market above 90% or below 10%, or one with over $100,000 of volume."
             />
           ) : (
-            <div className="max-h-[600px] space-y-3 overflow-y-auto pr-1">
+            <div className="space-y-3">
               {signals.map((signal) => (
                 <SignalCard key={signal.id} signal={signal} now={now} />
               ))}

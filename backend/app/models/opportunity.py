@@ -34,6 +34,11 @@ class Opportunity(BaseModel):
     yes_token_id: str | None = None
     no_token_id: str | None = None
     max_size: float | None = None  # Max size at these prices
+    best_ask_size: float | None = None  # Top-of-book min(yes_ask_size, no_ask_size)
+    max_executable_size: float | None = None  # Total profitable shares across ask levels
+    max_executable_profit: float | None = None  # Total net USD profit across profitable ask levels
+    vwap_combined_cost: float | None = None  # Volume-weighted combined cost across profitable levels
+    used_fallback: bool = False  # True when Gamma prices were used instead of CLOB asks
 
     # Metadata
     detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

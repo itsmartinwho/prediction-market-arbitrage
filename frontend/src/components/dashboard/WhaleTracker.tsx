@@ -21,7 +21,7 @@ function TradeCard({ trade, now }: { trade: WhaleActivity; now: number }) {
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-medium text-neon-magenta">{trade.trader_name}</span>
+          <span className="truncate font-mono text-sm font-medium text-neon-cyan">{trade.trader_name}</span>
           <span
             className={`rounded px-2 py-0.5 font-mono text-xs ${
               isBuy ? "bg-neon-green/15 text-neon-green" : "bg-neon-red/15 text-neon-red"
@@ -34,7 +34,7 @@ function TradeCard({ trade, now }: { trade: WhaleActivity; now: number }) {
           </span>
         </div>
         <time
-          className="shrink-0 text-xs text-gray-500"
+          className="shrink-0 text-xs text-gray-500 tabular-nums"
           dateTime={trade.timestamp}
           title={new Date(trade.timestamp).toLocaleString()}
         >
@@ -44,7 +44,7 @@ function TradeCard({ trade, now }: { trade: WhaleActivity; now: number }) {
 
       <p className="mb-3 line-clamp-2 text-sm text-gray-200 group-hover:text-white">{trade.market_question}</p>
 
-      <div className="flex items-center justify-between text-xs">
+      <div className="flex items-center justify-between text-xs tabular-nums">
         <div className="flex items-center gap-4 text-gray-500">
           <span>
             <span className="font-mono text-gray-300">{Math.round(trade.size).toLocaleString()}</span> shares
@@ -77,7 +77,7 @@ export function WhaleTracker() {
         <NeonText color="magenta" size="lg">
           Whale trades
         </NeonText>
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-gray-500 tabular-nums">
           {query.data ? `${trades.length} of the latest trades of $1,000 or more, largest first` : "Trades of $1,000 or more"}
         </span>
       </div>
@@ -92,7 +92,7 @@ export function WhaleTracker() {
           {trades.length === 0 ? (
             <EmptyState title="No trades of $1,000 or more among the latest." />
           ) : (
-            <div className="max-h-[600px] space-y-3 overflow-y-auto pr-1">
+            <div className="space-y-3">
               {trades.map((trade, index) => (
                 <TradeCard key={`${trade.transaction_hash || index}-${trade.timestamp}`} trade={trade} now={now} />
               ))}
